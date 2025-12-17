@@ -26,7 +26,8 @@ export default {
       package: "com.eventapp"
     },
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/favicon.png",
+      bundler: "metro"
     },
     plugins: [
       "expo-router"
@@ -34,7 +35,9 @@ export default {
     scheme: "event-app",
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
-    }
+    },
+    // Ensure expo-constants can access manifest
+    sdkVersion: "50.0.0"
   }
 };
 
