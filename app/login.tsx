@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
+import { Logo } from '../components/Logo';
+import { GradientText } from '../components/GradientText';
 
 export default function LoginScreen() {
   const { t, isRTL } = useLanguage();
@@ -23,9 +25,12 @@ export default function LoginScreen() {
       contentContainerStyle={styles.contentContainer}
     >
       <View style={styles.header}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>E</Text>
-        </View>
+        <Logo size={120} />
+        {Platform.OS === 'web' ? (
+          <GradientText style={styles.appName}>Ducat</GradientText>
+        ) : (
+          <Text style={[styles.appName, { color: '#D4A444' }]}>Ducat</Text>
+        )}
         <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
         <Text style={styles.subtitle}>{t('auth.signInToContinue')}</Text>
       </View>
@@ -86,7 +91,7 @@ export default function LoginScreen() {
             <Switch
               value={rememberMe}
               onValueChange={setRememberMe}
-              trackColor={{ false: '#e5e7eb', true: '#000' }}
+              trackColor={{ false: '#e5e7eb', true: '#D4A444' }}
               thumbColor="#fff"
             />
             <Text style={styles.checkboxLabel}>{t('auth.rememberMe')}</Text>
@@ -125,19 +130,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  logo: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#000',
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logoText: {
-    color: '#fff',
-    fontSize: 24,
+  appName: {
+    fontSize: 40,
     fontWeight: 'bold',
+    marginTop: 0,
+    marginBottom: 20,
+    letterSpacing: 1,
+    alignSelf: 'center',
   },
   title: {
     fontSize: 28,
@@ -221,7 +220,7 @@ const styles = StyleSheet.create({
   },
   forgotPassword: {
     fontSize: 14,
-    color: '#2563eb',
+    color: '#D4A444',
   },
   button: {
     backgroundColor: '#000',
@@ -246,7 +245,7 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     fontSize: 14,
-    color: '#2563eb',
+    color: '#D4A444',
     fontWeight: '600',
   },
 });

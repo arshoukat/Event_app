@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#000',
+    borderBottomColor: '#D4A444',
   },
   tabText: {
     fontSize: 16,
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#000',
+    color: '#D4A444',
     fontWeight: '600',
   },
   scrollView: {

@@ -102,6 +102,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 8,
+    borderWidth: 1,
+    borderColor: '#D4A444',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -112,7 +114,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 12,
     left: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#D4A444',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -120,7 +122,7 @@ const styles = StyleSheet.create({
   priceText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
+    color: '#fff',
   },
   content: {
     padding: 16,

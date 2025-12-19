@@ -212,6 +212,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 8,
+    borderWidth: 1,
+    borderColor: '#D4A444',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -274,7 +276,7 @@ const styles = StyleSheet.create({
   followButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
     borderRadius: 20,
   },
   followButtonText: {
@@ -359,7 +361,7 @@ const styles = StyleSheet.create({
   },
   bookButton: {
     flex: 2,
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',

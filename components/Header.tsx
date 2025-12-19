@@ -1,12 +1,21 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Logo } from './Logo';
+import { GradientText } from './GradientText';
 
 export function Header() {
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Events</Text>
+        <View style={styles.logoContainer}>
+          {Platform.OS === 'web' ? (
+            <GradientText style={styles.title}>Ducat</GradientText>
+          ) : (
+            <Text style={[styles.title, { color: '#D4A444' }]}>Ducat</Text>
+          )}
+          <Logo size={32} />
+        </View>
         <View style={styles.iconRow}>
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="notifications-outline" size={20} color="#000" />
@@ -43,10 +52,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#000',
   },
   iconRow: {
     flexDirection: 'row',

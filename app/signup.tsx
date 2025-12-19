@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
+import { Logo } from '../components/Logo';
+import { GradientText } from '../components/GradientText';
 
 type SignupStep = 'phone' | 'otp' | 'profile';
 
@@ -86,9 +88,12 @@ export default function SignupScreen() {
       contentContainerStyle={styles.contentContainer}
     >
       <View style={styles.header}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>E</Text>
-        </View>
+        <Logo size={120} />
+        {Platform.OS === 'web' ? (
+          <GradientText style={styles.appName}>Ducat</GradientText>
+        ) : (
+          <Text style={[styles.appName, { color: '#D4A444' }]}>Ducat</Text>
+        )}
         <Text style={styles.title}>
           {step === 'phone' && t('auth.createAccount')}
           {step === 'otp' && t('auth.verifyOTP')}
@@ -278,7 +283,7 @@ export default function SignupScreen() {
             <Switch
               value={acceptTerms}
               onValueChange={setAcceptTerms}
-              trackColor={{ false: '#e5e7eb', true: '#000' }}
+              trackColor={{ false: '#e5e7eb', true: '#D4A444' }}
               thumbColor="#fff"
             />
             <Text style={styles.termsText}>
@@ -323,19 +328,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
   },
-  logo: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#000',
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  logoText: {
-    color: '#fff',
-    fontSize: 24,
+  appName: {
+    fontSize: 40,
     fontWeight: 'bold',
+    marginTop: 0,
+    marginBottom: 20,
+    letterSpacing: 1,
+    alignSelf: 'center',
   },
   title: {
     fontSize: 28,
@@ -426,7 +425,7 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     fontSize: 14,
-    color: '#9333ea',
+    color: '#D4A444',
     fontWeight: '600',
   },
   backButton: {
@@ -469,7 +468,7 @@ const styles = StyleSheet.create({
   },
   resendLink: {
     fontSize: 14,
-    color: '#9333ea',
+    color: '#D4A444',
   },
   resendLinkDisabled: {
     color: '#9ca3af',
@@ -489,7 +488,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   termsLink: {
-    color: '#9333ea',
+    color: '#D4A444',
   },
   progressContainer: {
     flexDirection: 'row',
@@ -504,7 +503,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db',
   },
   progressDotActive: {
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
   },
 });
 

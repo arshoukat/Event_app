@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   categoryButtonActive: {
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
   },
   categoryLabel: {
     fontSize: 14,

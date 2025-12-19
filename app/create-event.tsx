@@ -561,7 +561,7 @@ export default function CreateEventScreen() {
             <Switch
               value={formData.requiresLicense}
               onValueChange={(value) => handleInputChange('requiresLicense', value)}
-              trackColor={{ false: '#e5e7eb', true: '#000' }}
+              trackColor={{ false: '#e5e7eb', true: '#D4A444' }}
               thumbColor="#fff"
             />
           </View>
@@ -682,7 +682,7 @@ export default function CreateEventScreen() {
             <Switch
               value={formData.requireApproval}
               onValueChange={(value) => handleInputChange('requireApproval', value)}
-              trackColor={{ false: '#e5e7eb', true: '#000' }}
+              trackColor={{ false: '#e5e7eb', true: '#D4A444' }}
               thumbColor="#fff"
             />
           </View>
@@ -692,7 +692,7 @@ export default function CreateEventScreen() {
             <Switch
               value={formData.allowGuests}
               onValueChange={(value) => handleInputChange('allowGuests', value)}
-              trackColor={{ false: '#e5e7eb', true: '#000' }}
+              trackColor={{ false: '#e5e7eb', true: '#D4A444' }}
               thumbColor="#fff"
             />
           </View>
@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   publishButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   addTagButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1008,7 +1008,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   addSeatTypeButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#D4A444',
     padding: 12,
     borderRadius: 8,
     justifyContent: 'center',

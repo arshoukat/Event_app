@@ -40,7 +40,7 @@ export default function SettingsScreen() {
               <Switch
                 value={language === 'ar'}
                 onValueChange={toggleLanguage}
-                trackColor={{ false: '#d1d5db', true: '#9333ea' }}
+                trackColor={{ false: '#d1d5db', true: '#D4A444' }}
                 thumbColor="#fff"
               />
             </View>

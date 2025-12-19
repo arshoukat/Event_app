@@ -35,7 +35,7 @@ export function BottomNav({ activeView, onNavigate }: BottomNavProps) {
               <Ionicons 
                 name={isActive ? item.icon : `${item.icon}-outline` as any} 
                 size={20} 
-                color={isActive ? '#000' : '#9ca3af'} 
+                color={isActive ? '#D4A444' : '#9ca3af'} 
               />
               <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
                 {item.label}
@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   navLabelActive: {
-    color: '#000',
+    color: '#D4A444',
   },
 });
 
