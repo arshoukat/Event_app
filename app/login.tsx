@@ -9,7 +9,7 @@ import { GradientText } from '../components/GradientText';
 export default function LoginScreen() {
   const { t, isRTL } = useLanguage();
   const router = useRouter();
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -37,20 +37,21 @@ export default function LoginScreen() {
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>{t('auth.phoneNumber')}</Text>
+          <Text style={styles.label}>{t('auth.emailRequired')}</Text>
           <View style={styles.inputWrapper}>
             <Ionicons 
-              name="call-outline" 
+              name="mail-outline" 
               size={20} 
               color="#9ca3af" 
               style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
             />
             <TextInput
               style={[styles.input, isRTL && styles.inputRTL]}
-              placeholder="+1 (555) 000-0000"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
+              placeholder="example@email.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
               placeholderTextColor="#9ca3af"
             />
           </View>

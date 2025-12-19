@@ -21,7 +21,7 @@ export default function ProfileScreen() {
         { icon: 'person-outline', label: t('profile.editProfile'), action: () => router.push('/edit-profile') },
         { icon: 'heart-outline', label: t('profile.savedEvents'), count: 5, action: () => router.push('/saved-events') },
         { icon: 'calendar-outline', label: t('profile.myEvents'), count: 3, action: () => router.push('/my-events') },
-        { icon: 'card-outline', label: t('profile.paymentMethods'), action: () => {} }
+        { icon: 'card-outline', label: t('profile.paymentMethods'), action: () => router.push('/payment-methods') }
       ]
     },
     {

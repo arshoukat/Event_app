@@ -6,16 +6,15 @@ import { useRouter } from 'expo-router';
 import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
 
-type SignupStep = 'phone' | 'otp' | 'profile';
+type SignupStep = 'email' | 'otp' | 'profile';
 
 export default function SignupScreen() {
   const { t, isRTL } = useLanguage();
   const router = useRouter();
-  const [step, setStep] = useState<SignupStep>('phone');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [step, setStep] = useState<SignupStep>('email');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -24,11 +23,16 @@ export default function SignupScreen() {
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
   const handleSendOTP = () => {
-    if (!phoneNumber) {
-      Alert.alert('Error', 'Please enter your phone number');
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
       return;
     }
-    console.log('Sending OTP to:', phoneNumber);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+    console.log('Sending OTP to:', email);
     setStep('otp');
   };
 
@@ -78,7 +82,7 @@ export default function SignupScreen() {
     setIsResending(true);
     setTimeout(() => {
       setIsResending(false);
-      console.log('OTP resent to:', phoneNumber);
+      console.log('OTP resent to:', email);
     }, 2000);
   };
 
@@ -95,35 +99,36 @@ export default function SignupScreen() {
           <Text style={[styles.appName, { color: '#D4A444' }]}>Ducat</Text>
         )}
         <Text style={styles.title}>
-          {step === 'phone' && t('auth.createAccount')}
+          {step === 'email' && t('auth.createAccount')}
           {step === 'otp' && t('auth.verifyOTP')}
           {step === 'profile' && t('auth.completeProfile')}
         </Text>
         <Text style={styles.subtitle}>
-          {step === 'phone' && t('auth.enterPhone')}
-          {step === 'otp' && `${t('auth.sentCodeTo')} ${phoneNumber}`}
+          {step === 'email' && t('auth.enterEmailToGetStarted')}
+          {step === 'otp' && `${t('auth.sentCodeTo')} ${email}`}
           {step === 'profile' && t('auth.tellAboutYourself')}
         </Text>
       </View>
 
-      {/* Step 1: Phone Number */}
-      {step === 'phone' && (
+      {/* Step 1: Email */}
+      {step === 'email' && (
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('auth.phoneNumber')}</Text>
+            <Text style={styles.label}>{t('auth.emailRequired')}</Text>
             <View style={styles.inputWrapper}>
               <Ionicons 
-                name="call-outline" 
+                name="mail-outline" 
                 size={20} 
                 color="#9ca3af" 
                 style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
               />
               <TextInput
                 style={[styles.input, isRTL && styles.inputRTL]}
-                placeholder="+1 (555) 000-0000"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
+                placeholder="example@email.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
                 placeholderTextColor="#9ca3af"
               />
             </View>
@@ -147,11 +152,11 @@ export default function SignupScreen() {
       {step === 'otp' && (
         <View style={styles.form}>
           <TouchableOpacity
-            onPress={() => setStep('phone')}
+            onPress={() => setStep('email')}
             style={[styles.backButton, isRTL && styles.backButtonRTL]}
           >
             <Ionicons name="arrow-back" size={16} color="#6b7280" />
-            <Text style={styles.backButtonText}>{t('auth.changePhoneNumber')}</Text>
+            <Text style={styles.backButtonText}>{t('auth.changeEmail')}</Text>
           </TouchableOpacity>
 
           <Text style={styles.label}>{t('auth.enterDigitCode')}</Text>
@@ -208,26 +213,6 @@ export default function SignupScreen() {
             </View>
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('auth.email')}</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="mail-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
-              />
-              <TextInput
-                style={[styles.input, isRTL && styles.inputRTL]}
-                placeholder={t('auth.enterEmail')}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-          </View>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('auth.createPassword')}</Text>
@@ -306,7 +291,7 @@ export default function SignupScreen() {
 
       {/* Progress Indicator */}
       <View style={styles.progressContainer}>
-        <View style={[styles.progressDot, step === 'phone' && styles.progressDotActive]} />
+        <View style={[styles.progressDot, step === 'email' && styles.progressDotActive]} />
         <View style={[styles.progressDot, step === 'otp' && styles.progressDotActive]} />
         <View style={[styles.progressDot, step === 'profile' && styles.progressDotActive]} />
       </View>

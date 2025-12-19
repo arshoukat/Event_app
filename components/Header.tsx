@@ -1,10 +1,13 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Logo } from './Logo';
 import { GradientText } from './GradientText';
 
 export function Header() {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -17,10 +20,16 @@ export function Header() {
           <Logo size={32} />
         </View>
         <View style={styles.iconRow}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => router.push('/notifications')}
+          >
             <Ionicons name="notifications-outline" size={20} color="#000" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity 
+            style={styles.iconButton}
+            onPress={() => router.push('/edit-profile')}
+          >
             <Ionicons name="person-outline" size={20} color="#000" />
           </TouchableOpacity>
         </View>
