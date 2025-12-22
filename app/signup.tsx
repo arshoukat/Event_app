@@ -87,20 +87,43 @@ export default function SignupScreen() {
     }
     setLoadingSignup(true);
     try {
-      await apiService.post('/auth/signup/complete', {
+      const response = await apiService.post('/auth/signup/complete', {
         email,
         name: fullName,
         password,
         confirmPassword,
       });
-      Alert.alert('Success', 'Account created successfully! Please login to continue.', [
-        { text: 'OK', onPress: () => router.replace('/login') }
-      ]);
-    } catch (err) {
-      console.error('Signup failed', err);
-      Alert.alert('Error', 'Failed to create account. Please try again.');
-    } finally {
+      console.log('Signup successful:', response);
+      
+      // Reset loading state
       setLoadingSignup(false);
+      
+      // Show success alert
+      Alert.alert(
+        'Success', 
+        'Your account is created successfully, please login',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              console.log('Alert OK pressed');
+            }
+          }
+        ],
+        { cancelable: false }
+      );
+      
+      // Redirect immediately after showing alert
+      // Using setTimeout to ensure Alert is displayed first
+      setTimeout(() => {
+        console.log('Redirecting to login page...');
+        router.replace('/login');
+      }, 500);
+    } catch (err: any) {
+      console.error('Signup failed', err);
+      setLoadingSignup(false);
+      const errorMessage = err?.message || 'Failed to create account. Please try again.';
+      Alert.alert('Error', errorMessage);
     }
   };
 

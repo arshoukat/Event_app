@@ -40,8 +40,15 @@ class ApiService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      return data;
+      // Handle empty responses (like 201 Created with no body)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        return data;
+      } else {
+        // Return empty object for successful responses without JSON body
+        return {} as T;
+      }
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
