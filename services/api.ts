@@ -1,6 +1,8 @@
 // Configure your API URL in .env file or set it here
 // For external APIs, set EXPO_PUBLIC_API_URL in your .env file
-const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
+import { storageService } from './storage';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5002/api';
 
 class ApiService {
   private baseUrl: string;
@@ -15,9 +17,13 @@ class ApiService {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     
+    // Get token from storage
+    const token = await storageService.getToken();
+    
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
@@ -27,6 +33,10 @@ class ApiService {
       const response = await fetch(url, config);
       
       if (!response.ok) {
+        // Handle unauthorized - token might be invalid
+        if (response.status === 401) {
+          await storageService.clearAuth();
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
