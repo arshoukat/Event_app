@@ -1,7 +1,7 @@
 export default {
   expo: {
-    name: "Event App",
-    slug: "event-app",
+    name: "Ducat",
+    slug: "ducat",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
@@ -16,25 +16,28 @@ export default {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.eventapp"
+      bundleIdentifier: "com.ducat"
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      package: "com.eventapp"
+      package: "com.ducat"
     },
     web: {
-      favicon: "./assets/favicon.png"
+      favicon: "./assets/favicon.png",
+      bundler: "metro"
     },
     plugins: [
       "expo-router"
     ],
-    scheme: "event-app",
+    scheme: "ducat",
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
-    }
+    },
+    // Ensure expo-constants can access manifest
+    sdkVersion: "50.0.0"
   }
 };
 
