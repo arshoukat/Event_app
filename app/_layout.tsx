@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { LanguageProvider } from '../contexts/LanguageContext';
+import Toast from 'react-native-toast-message';
 
 export default function RootLayout() {
   return (
@@ -22,6 +23,7 @@ export default function RootLayout() {
         <Stack.Screen name="create-event" />
         <Stack.Screen name="forgot-password" />
       </Stack>
+      <Toast />
     </LanguageProvider>
   );
 }

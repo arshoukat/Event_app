@@ -1,11 +1,26 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
 import { ImageWithFallback } from '../components/ImageWithFallback';
-// Using built-in date/time inputs - for production, consider expo-date-picker
+import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { encode } from 'base-64';
+import Toast from 'react-native-toast-message';
+
+// Conditionally import DateTimePicker only on native platforms
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    DateTimePicker = require('@react-native-community/datetimepicker').default;
+  } catch (e) {
+    console.warn('DateTimePicker not available:', e);
+  }
+}
 
 export default function CreateEventScreen() {
   const { t } = useLanguage();
@@ -31,6 +46,7 @@ export default function CreateEventScreen() {
     category: '',
     visibility: 'public' as 'public' | 'private',
     isPaid: false,
+    iban: '', // IBAN for paid events
     seatTypes: [] as SeatType[],
     requiresLicense: false,
     licenseFile: null as string | null,
@@ -40,8 +56,24 @@ export default function CreateEventScreen() {
   });
 
   const [tagInput, setTagInput] = useState('');
+  const [inviteEmailInput, setInviteEmailInput] = useState('');
+  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
   const [coverImage, setCoverImage] = useState('');
+  const [coverImageBase64, setCoverImageBase64] = useState<string | null>(null);
+  const [licenseFileUri, setLicenseFileUri] = useState<string | null>(null);
   const [newSeatType, setNewSeatType] = useState({ name: '', price: '' });
+  const [showSeatTypePicker, setShowSeatTypePicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  // Seat type options for dropdown
+  const seatTypeOptions = [
+    { value: 'General seat', label: 'General seat' },
+    { value: 'Pro seat', label: 'Pro seat' },
+    { value: 'VIP seat', label: 'VIP seat' },
+  ];
 
   const categories = [
     { value: 'music', label: t('category.music') },
@@ -56,7 +88,7 @@ export default function CreateEventScreen() {
     { value: 'other', label: t('category.other') },
   ];
 
-  const handleInputChange = (field: string, value: string | boolean | Date) => {
+  const handleInputChange = (field: string, value: string | boolean | Date | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -75,6 +107,44 @@ export default function CreateEventScreen() {
       ...prev,
       tags: prev.tags.filter((_, i) => i !== index)
     }));
+  };
+
+  const handleAddInviteEmail = () => {
+    const email = inviteEmailInput.trim();
+    if (email) {
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        Alert.alert('Error', 'Please enter a valid email address');
+        return;
+      }
+      if (invitedEmails.includes(email)) {
+        Alert.alert('Error', 'This email is already in the invite list');
+        return;
+      }
+      setInvitedEmails(prev => [...prev, email]);
+      setInviteEmailInput('');
+    }
+  };
+
+  const handleRemoveInviteEmail = (index: number) => {
+    setInvitedEmails(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Function to encode IBAN (using base64 encoding)
+  const encodeIBAN = (iban: string): string => {
+    // Remove spaces and convert to uppercase
+    const cleanedIBAN = iban.replace(/\s/g, '').toUpperCase();
+    // Encode to base64
+    return encode(cleanedIBAN);
+  };
+
+  // IBAN validation function
+  const validateIBAN = (iban: string): boolean => {
+    // Basic IBAN validation (2 letters + 2 digits + up to 30 alphanumeric)
+    const ibanRegex = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/;
+    const cleaned = iban.replace(/\s/g, '').toUpperCase();
+    return ibanRegex.test(cleaned);
   };
 
   const handleAddSeatType = () => {
@@ -99,24 +169,68 @@ export default function CreateEventScreen() {
     }));
   };
 
-  const handleLicenseUpload = () => {
-    // In a real app, this would open document picker
-    Alert.alert('License Upload', 'PDF picker will be implemented with expo-document-picker', [
-      {
-        text: 'Cancel',
-        style: 'cancel'
-      },
-      {
-        text: 'Select PDF',
-        onPress: () => {
-          // Mock file selection
-          setFormData(prev => ({
-            ...prev,
-            licenseFile: 'license-document.pdf'
-          }));
+  const handleLicenseUpload = async () => {
+    try {
+      // Launch document picker for PDF files only
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedFile = result.assets[0];
+        // Store the file name and URI
+        setFormData(prev => ({
+          ...prev,
+          licenseFile: selectedFile.name || 'license-document.pdf'
+        }));
+        setLicenseFileUri(selectedFile.uri);
+        
+        console.log('Selected PDF file:', selectedFile.name, selectedFile.uri);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick PDF file. Please try again.');
+    }
+  };
+
+  const handleImagePick = async () => {
+    try {
+      // Request permissions
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Required', 'Sorry, we need camera roll permissions to upload images!');
+          return;
         }
       }
-    ]);
+
+      // Launch image picker with base64 option
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9], // Standard cover image aspect ratio
+        quality: 0.8,
+        base64: true, // Enable base64 encoding
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0];
+        setCoverImage(selectedImage.uri);
+        // Store base64 string if available
+        if (selectedImage.base64) {
+          // Format: data:image/jpeg;base64,{base64string}
+          const base64String = `data:image/jpeg;base64,${selectedImage.base64}`;
+          setCoverImageBase64(base64String);
+        } else {
+          setCoverImageBase64(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
   };
 
   const formatTime = (date: Date) => {
@@ -135,7 +249,22 @@ export default function CreateEventScreen() {
     });
   };
 
-  const handleSubmit = () => {
+  // Format date for HTML5 date input (YYYY-MM-DD)
+  const formatDateForInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Format time for HTML5 time input (HH:MM)
+  const formatTimeForInput = (date: Date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const handleSubmit = async () => {
     // Validation
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter an event title');
@@ -157,16 +286,115 @@ export default function CreateEventScreen() {
       Alert.alert('Error', t('createEvent.addAtLeastOneSeatType'));
       return;
     }
+    if (formData.isPaid && !formData.iban.trim()) {
+      Alert.alert('Error', 'Please enter your IBAN number');
+      return;
+    }
+    if (formData.isPaid && !validateIBAN(formData.iban)) {
+      Alert.alert('Error', 'Please enter a valid IBAN number');
+      return;
+    }
     if (formData.requiresLicense && !formData.licenseFile) {
-      Alert.alert('Error', t('createEvent.uploadLicenseRequired'));
+      Alert.alert('Error', t('createEvent.uploadLicenseRequired') || 'Please upload a license file');
+      return;
+    }
+    if (formData.visibility === 'private' && invitedEmails.length === 0) {
+      Alert.alert('Error', 'Please add at least one email address for private events');
       return;
     }
 
-    // In a real app, this would save to backend
-    console.log('Event created:', formData);
-    Alert.alert('Success', 'Event created successfully!', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
+    setIsSubmitting(true);
+    try {
+      // Get authentication token
+      const token = await storageService.getToken();
+      if (!token) {
+        Alert.alert('Error', 'Please login to create an event');
+        router.push('/login');
+        return;
+      }
+
+      // Combine date and startTime into ISO format for main date
+      const eventDate = new Date(formData.date);
+      const startTimeDate = new Date(formData.startTime);
+      eventDate.setHours(startTimeDate.getHours());
+      eventDate.setMinutes(startTimeDate.getMinutes());
+      eventDate.setSeconds(0);
+      eventDate.setMilliseconds(0);
+      
+      // Combine date and endTime
+      const endTimeDate = new Date(formData.date);
+      const endTime = new Date(formData.endTime);
+      endTimeDate.setHours(endTime.getHours());
+      endTimeDate.setMinutes(endTime.getMinutes());
+      endTimeDate.setSeconds(0);
+      endTimeDate.setMilliseconds(0);
+      
+      // Prepare price array - array of seat types with prices
+      let price: Array<{ name: string; price: number }> = [];
+      if (formData.isPaid && formData.seatTypes.length > 0) {
+        // Convert seat types to price array format
+        price = formData.seatTypes.map(st => ({
+          name: st.name,
+          price: parseFloat(st.price) || 0
+        }));
+      }
+      // For free events, price remains an empty array
+
+      // Prepare event data according to API format
+      const eventData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        date: eventDate.toISOString(),
+        startTime: eventDate.toISOString(), // Start time combined with date
+        endTime: endTimeDate.toISOString(), // End time combined with date
+        location: formData.location.trim() || formData.venue.trim(),
+        venue: formData.venue.trim() || undefined, // Venue field
+        category: formData.category,
+        price: price, // Now an array of seat types with prices
+        capacity: formData.capacity ? parseInt(formData.capacity) : undefined,
+        status: 'published', // You can change this to 'draft' if needed
+        imageUrl: coverImageBase64 || null, // Use base64 if available, otherwise null
+        tags: formData.tags, // Tags array
+        visibility: formData.visibility, // Privacy/visibility field
+        invitedEmails: formData.visibility === 'private' ? invitedEmails : undefined, // Invited emails if private
+        licenseFile: formData.requiresLicense && formData.licenseFile ? formData.licenseFile : undefined, // License file if required
+        iban: formData.isPaid ? encodeIBAN(formData.iban) : undefined, // Encoded IBAN for paid events
+      };
+
+      console.log('Event data being sent:', eventData);
+      console.log('Cover image URI:', coverImage);
+      console.log('Cover image base64 available:', !!coverImageBase64);
+
+      console.log('Creating event with data:', eventData);
+
+      // Call the API - using the events endpoint
+      // Note: Ensure API_URL in services/api.ts matches your backend URL
+      // If your events API is on port 5001, update EXPO_PUBLIC_API_URL or the default in api.ts
+      const result = await apiService.post('/events', eventData);
+      
+      console.log('Event created successfully:', result);
+      
+      // Show toast message for 10 seconds
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Event created successfully!',
+        visibilityTime: 10000, // 10 seconds
+        autoHide: true,
+        topOffset: 60,
+      });
+
+      // Redirect to home after 10 seconds
+      setTimeout(() => {
+        router.replace('/home');
+      }, 10000);
+    } catch (err: any) {
+      console.error('Failed to create event:', err);
+      const errorMessage = err?.message || 'Failed to create event. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -177,8 +405,14 @@ export default function CreateEventScreen() {
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('createEvent.title')}</Text>
-        <TouchableOpacity onPress={handleSubmit} style={styles.publishButton}>
-          <Text style={styles.publishButtonText}>{t('createEvent.publish')}</Text>
+        <TouchableOpacity 
+          onPress={handleSubmit} 
+          style={[styles.publishButton, isSubmitting && styles.publishButtonDisabled]}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.publishButtonText}>
+            {isSubmitting ? 'Publishing...' : t('createEvent.publish')}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -199,10 +433,7 @@ export default function CreateEventScreen() {
           ) : (
             <TouchableOpacity
               style={styles.imageUpload}
-              onPress={() => {
-                // In a real app, this would open image picker
-                Alert.alert('Image Upload', 'Image picker will be implemented with expo-image-picker');
-              }}
+              onPress={handleImagePick}
             >
               <Ionicons name="cloud-upload-outline" size={32} color="#9ca3af" />
               <Text style={styles.uploadText}>{t('createEvent.uploadCover')}</Text>
@@ -246,79 +477,293 @@ export default function CreateEventScreen() {
           <Text style={styles.label}>
             {t('createEvent.date')} <Text style={styles.required}>*</Text>
           </Text>
-          <View style={styles.dateButton}>
-            <Ionicons name="calendar-outline" size={20} color="#6b7280" />
-            <TextInput
-              style={styles.dateInput}
-              value={formatDate(formData.date)}
-              placeholder="Select date (e.g., Dec 15, 2025)"
-              placeholderTextColor="#9ca3af"
-              onChangeText={(text) => {
-                // Simple date parsing - in production use a proper date picker
-                const date = new Date(text);
-                if (!isNaN(date.getTime())) {
-                  handleInputChange('date', date);
+          {Platform.OS === 'web' ? (
+            <View style={styles.dateButton}>
+              <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+              <TextInput
+                style={styles.dateInput}
+                // @ts-ignore - type is supported on react-native-web
+                type="date"
+                value={formatDateForInput(formData.date)}
+                // @ts-ignore - onChange is supported on react-native-web
+                onChange={(e: any) => {
+                  const date = new Date(e.target.value);
+                  if (!isNaN(date.getTime())) {
+                    handleInputChange('date', date);
+                  }
+                }}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity 
+              style={styles.dateButton}
+              onPress={() => {
+                if (!DateTimePicker) {
+                  Alert.alert('Error', 'Date picker is not available. Please rebuild the app with: npx expo prebuild');
+                } else {
+                  console.log('Date picker button pressed, opening picker...');
+                  setShowDatePicker(true);
                 }
               }}
-            />
-          </View>
+            >
+              <Ionicons name="calendar-outline" size={20} color="#6b7280" />
+              <Text style={styles.dateInput}>
+                {formatDate(formData.date)}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.timeRow}>
             <View style={styles.timeColumn}>
               <Text style={styles.label}>
                 {t('createEvent.startTime')} <Text style={styles.required}>*</Text>
               </Text>
-              <View style={styles.dateButton}>
-                <Ionicons name="time-outline" size={20} color="#6b7280" />
-                <TextInput
-                  style={styles.dateInput}
-                  value={formatTime(formData.startTime)}
-                  placeholder="Start time (e.g., 6:00 PM)"
-                  placeholderTextColor="#9ca3af"
-                  onChangeText={(text) => {
-                    // Simple time parsing - in production use a proper time picker
-                    const [time, period] = text.split(' ');
-                    if (time) {
-                      const [hours, minutes] = time.split(':');
+              {Platform.OS === 'web' ? (
+                <View style={styles.dateButton}>
+                  <Ionicons name="time-outline" size={20} color="#6b7280" />
+                  <TextInput
+                    style={styles.dateInput}
+                    // @ts-ignore - type is supported on react-native-web
+                    type="time"
+                    value={formatTimeForInput(formData.startTime)}
+                    // @ts-ignore - onChange is supported on react-native-web
+                    onChange={(e: any) => {
+                      const [hours, minutes] = e.target.value.split(':');
                       const date = new Date();
-                      let h = parseInt(hours) || 0;
-                      if (period?.toLowerCase() === 'pm' && h < 12) h += 12;
-                      if (period?.toLowerCase() === 'am' && h === 12) h = 0;
-                      date.setHours(h, parseInt(minutes) || 0);
+                      date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                       handleInputChange('startTime', date);
+                    }}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={styles.dateButton}
+                  onPress={() => {
+                    if (!DateTimePicker) {
+                      Alert.alert('Error', 'Time picker is not available.');
+                    } else {
+                      setShowStartTimePicker(true);
                     }
                   }}
-                />
-              </View>
+                >
+                  <Ionicons name="time-outline" size={20} color="#6b7280" />
+                  <Text style={styles.dateInput}>
+                    {formatTime(formData.startTime)}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.timeColumn}>
               <Text style={styles.label}>{t('createEvent.endTime')}</Text>
-              <View style={styles.dateButton}>
-                <Ionicons name="time-outline" size={20} color="#6b7280" />
-                <TextInput
-                  style={styles.dateInput}
-                  value={formatTime(formData.endTime)}
-                  placeholder="End time (e.g., 11:00 PM)"
-                  placeholderTextColor="#9ca3af"
-                  onChangeText={(text) => {
-                    // Simple time parsing - in production use a proper time picker
-                    const [time, period] = text.split(' ');
-                    if (time) {
-                      const [hours, minutes] = time.split(':');
+              {Platform.OS === 'web' ? (
+                <View style={styles.dateButton}>
+                  <Ionicons name="time-outline" size={20} color="#6b7280" />
+                  <TextInput
+                    style={styles.dateInput}
+                    // @ts-ignore - type is supported on react-native-web
+                    type="time"
+                    value={formatTimeForInput(formData.endTime)}
+                    // @ts-ignore - onChange is supported on react-native-web
+                    onChange={(e: any) => {
+                      const [hours, minutes] = e.target.value.split(':');
                       const date = new Date();
-                      let h = parseInt(hours) || 0;
-                      if (period?.toLowerCase() === 'pm' && h < 12) h += 12;
-                      if (period?.toLowerCase() === 'am' && h === 12) h = 0;
-                      date.setHours(h, parseInt(minutes) || 0);
+                      date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                       handleInputChange('endTime', date);
+                    }}
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={styles.dateButton}
+                  onPress={() => {
+                    if (!DateTimePicker) {
+                      Alert.alert('Error', 'Time picker is not available.');
+                    } else {
+                      setShowEndTimePicker(true);
                     }
                   }}
-                />
-              </View>
+                >
+                  <Ionicons name="time-outline" size={20} color="#6b7280" />
+                  <Text style={styles.dateInput}>
+                    {formatTime(formData.endTime)}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
+
+        {/* Date Picker Modal */}
+        {Platform.OS !== 'web' && DateTimePicker && showDatePicker && (
+          Platform.OS === 'ios' ? (
+            <Modal
+              visible={showDatePicker}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowDatePicker(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <TouchableOpacity 
+                  style={styles.modalContent}
+                  activeOpacity={1}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select Date</Text>
+                    <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                      <Text style={styles.modalDone}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={formData.date}
+                    mode="date"
+                    display="spinner"
+                    onChange={(event: any, selectedDate?: Date) => {
+                      console.log('Date picker onChange:', event.type, selectedDate);
+                      if (event.type === 'set' && selectedDate) {
+                        handleInputChange('date', selectedDate);
+                      }
+                    }}
+                    minimumDate={new Date()}
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={formData.date}
+              mode="date"
+              display="default"
+              onChange={(event: any, selectedDate?: Date) => {
+                console.log('Android date picker onChange:', event.type, selectedDate);
+                setShowDatePicker(false);
+                if (event.type === 'set' && selectedDate) {
+                  handleInputChange('date', selectedDate);
+                }
+              }}
+              minimumDate={new Date()}
+            />
+          )
+        )}
+
+        {/* Start Time Picker Modal */}
+        {Platform.OS !== 'web' && DateTimePicker && showStartTimePicker && (
+          Platform.OS === 'ios' ? (
+            <Modal
+              visible={showStartTimePicker}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowStartTimePicker(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowStartTimePicker(false)}
+              >
+                <TouchableOpacity 
+                  style={styles.modalContent}
+                  activeOpacity={1}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select Start Time</Text>
+                    <TouchableOpacity onPress={() => setShowStartTimePicker(false)}>
+                      <Text style={styles.modalDone}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={formData.startTime}
+                    mode="time"
+                    display="spinner"
+                    is24Hour={false}
+                    onChange={(event: any, selectedTime?: Date) => {
+                      console.log('Start time picker onChange:', event.type, selectedTime);
+                      if (event.type === 'set' && selectedTime) {
+                        handleInputChange('startTime', selectedTime);
+                      }
+                    }}
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={formData.startTime}
+              mode="time"
+              display="default"
+              is24Hour={false}
+              onChange={(event: any, selectedTime?: Date) => {
+                console.log('Android start time picker onChange:', event.type, selectedTime);
+                setShowStartTimePicker(false);
+                if (event.type === 'set' && selectedTime) {
+                  handleInputChange('startTime', selectedTime);
+                }
+              }}
+            />
+          )
+        )}
+
+        {/* End Time Picker Modal */}
+        {Platform.OS !== 'web' && DateTimePicker && showEndTimePicker && (
+          Platform.OS === 'ios' ? (
+            <Modal
+              visible={showEndTimePicker}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowEndTimePicker(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowEndTimePicker(false)}
+              >
+                <TouchableOpacity 
+                  style={styles.modalContent}
+                  activeOpacity={1}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select End Time</Text>
+                    <TouchableOpacity onPress={() => setShowEndTimePicker(false)}>
+                      <Text style={styles.modalDone}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <DateTimePicker
+                    value={formData.endTime}
+                    mode="time"
+                    display="spinner"
+                    is24Hour={false}
+                    onChange={(event: any, selectedTime?: Date) => {
+                      console.log('End time picker onChange:', event.type, selectedTime);
+                      if (event.type === 'set' && selectedTime) {
+                        handleInputChange('endTime', selectedTime);
+                      }
+                    }}
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Modal>
+          ) : (
+            <DateTimePicker
+              value={formData.endTime}
+              mode="time"
+              display="default"
+              is24Hour={false}
+              onChange={(event: any, selectedTime?: Date) => {
+                console.log('Android end time picker onChange:', event.type, selectedTime);
+                setShowEndTimePicker(false);
+                if (event.type === 'set' && selectedTime) {
+                  handleInputChange('endTime', selectedTime);
+                }
+              }}
+            />
+          )
+        )}
 
         {/* Event Type */}
         <View style={styles.section}>
@@ -493,6 +938,27 @@ export default function CreateEventScreen() {
           </View>
         </View>
 
+        {/* IBAN Input (if Paid) */}
+        {formData.isPaid && (
+          <View style={styles.section}>
+            <Text style={styles.label}>
+              IBAN Number <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={formData.iban}
+              onChangeText={(value) => handleInputChange('iban', value)}
+              placeholder="Enter your IBAN number"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <Text style={styles.hintText}>
+              Format: 2 letters + 2 digits + up to 30 alphanumeric characters
+            </Text>
+          </View>
+        )}
+
         {/* Payment Structure (if Paid) */}
         {formData.isPaid && (
           <View style={styles.section}>
@@ -524,13 +990,17 @@ export default function CreateEventScreen() {
             {/* Add New Seat Type */}
             <View style={styles.addSeatTypeContainer}>
               <View style={styles.seatTypeInputRow}>
-                <TextInput
-                  style={[styles.input, styles.seatTypeNameInput]}
-                  value={newSeatType.name}
-                  onChangeText={(value) => setNewSeatType(prev => ({ ...prev, name: value }))}
-                  placeholder={t('createEvent.seatTypeName')}
-                  placeholderTextColor="#9ca3af"
-                />
+                {/* Seat Type Dropdown */}
+                <TouchableOpacity
+                  style={[styles.input, styles.seatTypeNameInput, styles.dropdownButton]}
+                  onPress={() => setShowSeatTypePicker(true)}
+                >
+                  <Text style={newSeatType.name ? styles.inputText : styles.placeholderText}>
+                    {newSeatType.name || t('createEvent.selectSeatType') || 'Select Seat Type'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={20} color="#6b7280" style={styles.dropdownIcon} />
+                </TouchableOpacity>
+                
                 <TextInput
                   style={[styles.input, styles.seatTypePriceInput]}
                   value={newSeatType.price}
@@ -548,6 +1018,56 @@ export default function CreateEventScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Seat Type Picker Modal */}
+            {showSeatTypePicker && (
+              <Modal
+                visible={showSeatTypePicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowSeatTypePicker(false)}
+              >
+                <TouchableOpacity
+                  style={styles.modalOverlay}
+                  activeOpacity={1}
+                  onPress={() => setShowSeatTypePicker(false)}
+                >
+                  <View style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Select Seat Type</Text>
+                      <TouchableOpacity onPress={() => setShowSeatTypePicker(false)}>
+                        <Text style={styles.modalDone}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView>
+                      {seatTypeOptions.map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={[
+                            styles.pickerOption,
+                            newSeatType.name === option.value && styles.pickerOptionSelected
+                          ]}
+                          onPress={() => {
+                            setNewSeatType(prev => ({ ...prev, name: option.value }));
+                            setShowSeatTypePicker(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.pickerOptionText,
+                            newSeatType.name === option.value && styles.pickerOptionTextSelected
+                          ]}>
+                            {option.label}
+                          </Text>
+                          {newSeatType.name === option.value && (
+                            <Ionicons name="checkmark" size={20} color="#D4A444" />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+            )}
           </View>
         )}
 
@@ -573,7 +1093,10 @@ export default function CreateEventScreen() {
                   <Ionicons name="document-text-outline" size={24} color="#6b7280" />
                   <Text style={styles.licenseFileName}>{formData.licenseFile}</Text>
                   <TouchableOpacity
-                    onPress={() => handleInputChange('licenseFile', null)}
+                    onPress={() => {
+                      handleInputChange('licenseFile', null);
+                      setLicenseFileUri(null);
+                    }}
                     style={styles.removeLicenseButton}
                   >
                     <Ionicons name="close-circle" size={20} color="#ef4444" />
@@ -696,6 +1219,52 @@ export default function CreateEventScreen() {
               thumbColor="#fff"
             />
           </View>
+
+          {/* Invite Emails - Only show when visibility is private */}
+          {formData.visibility === 'private' && (
+            <View style={styles.inviteSection}>
+              <Text style={styles.label}>
+                {t('createEvent.inviteEmails') || 'Invite by Email'} <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={styles.tagInputRow}>
+                <TextInput
+                  style={[styles.input, styles.tagInput]}
+                  value={inviteEmailInput}
+                  onChangeText={setInviteEmailInput}
+                  placeholder={t('createEvent.inviteEmailPlaceholder') || 'Enter email address'}
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={handleAddInviteEmail}
+                />
+                <TouchableOpacity
+                  style={[styles.addTagButton, !inviteEmailInput.trim() && styles.addTagButtonDisabled]}
+                  onPress={handleAddInviteEmail}
+                  disabled={!inviteEmailInput.trim()}
+                >
+                  <Text style={styles.addTagButtonText}>{t('createEvent.add') || 'Add'}</Text>
+                </TouchableOpacity>
+              </View>
+              {invitedEmails.length > 0 && (
+                <View style={styles.tagsContainer}>
+                  {invitedEmails.map((email, index) => (
+                    <View key={index} style={styles.tag}>
+                      <Text style={styles.tagText}>{email}</Text>
+                      <TouchableOpacity onPress={() => handleRemoveInviteEmail(index)}>
+                        <Ionicons name="close-circle" size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {invitedEmails.length === 0 && (
+                <Text style={styles.hintText}>
+                  {t('createEvent.inviteEmailHint') || 'Add email addresses of people you want to invite to this private event'}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -725,6 +1294,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  publishButtonDisabled: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.6,
   },
   publishButtonText: {
     color: '#fff',
@@ -1007,6 +1580,43 @@ const styles = StyleSheet.create({
   seatTypePriceInput: {
     flex: 1,
   },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inputText: {
+    fontSize: 16,
+    color: '#374151',
+    flex: 1,
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: '#9ca3af',
+    flex: 1,
+  },
+  dropdownIcon: {
+    marginLeft: 8,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  pickerOptionSelected: {
+    backgroundColor: '#fef3c7',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: '#374151',
+  },
+  pickerOptionTextSelected: {
+    color: '#D4A444',
+    fontWeight: '500',
+  },
   addSeatTypeButton: {
     backgroundColor: '#D4A444',
     padding: 12,
@@ -1050,9 +1660,43 @@ const styles = StyleSheet.create({
   licenseFileName: {
     flex: 1,
     fontSize: 14,
-    color: '#374151',
+  },
+  inviteSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
   },
   removeLicenseButton: {
     padding: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  modalDone: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#D4A444',
   },
 });
