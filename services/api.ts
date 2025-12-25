@@ -32,17 +32,50 @@ class ApiService {
     try {
       const response = await fetch(url, config);
       
-      if (!response.ok) {
-        // Handle unauthorized - token might be invalid
-        if (response.status === 401) {
-          await storageService.clearAuth();
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
       // Handle empty responses (like 201 Created with no body)
       const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+      const isJson = contentType && contentType.includes('application/json');
+      
+      if (!response.ok) {
+        // Try to parse error response body
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        let errorData: any = null;
+        
+        try {
+          if (isJson) {
+            errorData = await response.json();
+            // Extract error message from various possible response formats
+            errorMessage = errorData.message || 
+                          errorData.error || 
+                          errorData.msg || 
+                          (errorData.data && (errorData.data.message || errorData.data.error)) ||
+                          errorMessage;
+          } else {
+            const text = await response.text();
+            if (text) {
+              errorMessage = text;
+            }
+          }
+        } catch (parseError) {
+          // If we can't parse the error, use the default message
+          console.warn('Could not parse error response:', parseError);
+        }
+        
+        // Handle unauthorized - token might be invalid
+        // Only clear auth if it's not a login endpoint (to avoid clearing on login failure)
+        if (response.status === 401 && !endpoint.includes('/auth/login')) {
+          await storageService.clearAuth();
+        }
+        
+        // Create error with status and message
+        const error = new Error(errorMessage) as any;
+        error.status = response.status;
+        error.data = errorData;
+        throw error;
+      }
+
+      // Handle successful responses
+      if (isJson) {
         const data = await response.json();
         return data;
       } else {

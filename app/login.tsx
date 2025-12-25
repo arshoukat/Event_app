@@ -67,8 +67,25 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       console.error('Login failed', err);
-      const errorMessage = err.message || 'Failed to login. Please check your credentials and try again.';
-      Alert.alert('Error', errorMessage);
+      
+      // Extract user-friendly error message
+      let errorMessage = 'Failed to login. Please check your credentials and try again.';
+      
+      if (err.message) {
+        // If it's a 401, provide a more specific message
+        if (err.status === 401) {
+          errorMessage = err.message.includes('401') 
+            ? 'Invalid email or password. Please check your credentials and try again.'
+            : err.message;
+        } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (!err.message.includes('HTTP error')) {
+          // Use the error message if it's not a generic HTTP error
+          errorMessage = err.message;
+        }
+      }
+      
+      Alert.alert('Login Failed', errorMessage);
     } finally {
       setLoading(false);
     }

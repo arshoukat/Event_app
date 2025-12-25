@@ -7,18 +7,38 @@ import { useRouter } from 'expo-router';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { encode } from 'base-64';
 import Toast from 'react-native-toast-message';
 
+// Conditionally import ImagePicker
+let ImagePicker: any = null;
+try {
+  ImagePicker = require('expo-image-picker');
+} catch (e) {
+  console.warn('expo-image-picker not available:', e);
+}
+
+// Conditionally import DocumentPicker
+let DocumentPicker: any = null;
+try {
+  DocumentPicker = require('expo-document-picker');
+} catch (e) {
+  console.warn('expo-document-picker not available:', e);
+}
+
 // Conditionally import DateTimePicker only on native platforms
+// Note: This package is not installed and requires Expo 52+, but the app works
+// with web-based date/time inputs as fallback on native platforms
 let DateTimePicker: any = null;
 if (Platform.OS !== 'web') {
   try {
-    DateTimePicker = require('@react-native-community/datetimepicker').default;
-  } catch (e) {
-    console.warn('DateTimePicker not available:', e);
+    // Try to require the module - if it fails, we'll use web inputs
+    const pickerModule = require('@react-native-community/datetimepicker');
+    DateTimePicker = pickerModule?.default || pickerModule;
+  } catch (e: any) {
+    // Module not available - this is expected if not installed
+    // The app will show date/time input buttons that work with web inputs
+    DateTimePicker = null;
   }
 }
 
@@ -171,6 +191,15 @@ export default function CreateEventScreen() {
 
   const handleLicenseUpload = async () => {
     try {
+      if (!DocumentPicker) {
+        Alert.alert(
+          'Document Picker Not Available',
+          'The document picker module is not available. Please restart the Expo development server and try again.\n\nRun: npm start (or expo start)',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       // Launch document picker for PDF files only
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
@@ -197,6 +226,15 @@ export default function CreateEventScreen() {
 
   const handleImagePick = async () => {
     try {
+      if (!ImagePicker) {
+        Alert.alert(
+          'Image Picker Not Available',
+          'The image picker module is not available. Please restart the Expo development server and try again.\n\nRun: npm start (or expo start)',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       // Request permissions
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -465,7 +503,7 @@ export default function CreateEventScreen() {
           <Text style={styles.label}>
             {t('createEvent.date')} <Text style={styles.required}>*</Text>
           </Text>
-          {Platform.OS === 'web' ? (
+          {Platform.OS === 'web' || !DateTimePicker ? (
             <View style={styles.dateButton}>
               <Ionicons name="calendar-outline" size={20} color="#6b7280" />
               <TextInput
@@ -486,12 +524,8 @@ export default function CreateEventScreen() {
             <TouchableOpacity 
               style={styles.dateButton}
               onPress={() => {
-                if (!DateTimePicker) {
-                  Alert.alert('Error', 'Date picker is not available. Please rebuild the app with: npx expo prebuild');
-                } else {
-                  console.log('Date picker button pressed, opening picker...');
-                  setShowDatePicker(true);
-                }
+                console.log('Date picker button pressed, opening picker...');
+                setShowDatePicker(true);
               }}
             >
               <Ionicons name="calendar-outline" size={20} color="#6b7280" />
@@ -506,7 +540,7 @@ export default function CreateEventScreen() {
               <Text style={styles.label}>
                 {t('createEvent.startTime')} <Text style={styles.required}>*</Text>
               </Text>
-              {Platform.OS === 'web' ? (
+              {Platform.OS === 'web' || !DateTimePicker ? (
                 <View style={styles.dateButton}>
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
                   <TextInput
@@ -527,11 +561,7 @@ export default function CreateEventScreen() {
                 <TouchableOpacity 
                   style={styles.dateButton}
                   onPress={() => {
-                    if (!DateTimePicker) {
-                      Alert.alert('Error', 'Time picker is not available.');
-                    } else {
-                      setShowStartTimePicker(true);
-                    }
+                    setShowStartTimePicker(true);
                   }}
                 >
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
@@ -544,7 +574,7 @@ export default function CreateEventScreen() {
 
             <View style={styles.timeColumn}>
               <Text style={styles.label}>{t('createEvent.endTime')}</Text>
-              {Platform.OS === 'web' ? (
+              {Platform.OS === 'web' || !DateTimePicker ? (
                 <View style={styles.dateButton}>
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
                   <TextInput
@@ -565,11 +595,7 @@ export default function CreateEventScreen() {
                 <TouchableOpacity 
                   style={styles.dateButton}
                   onPress={() => {
-                    if (!DateTimePicker) {
-                      Alert.alert('Error', 'Time picker is not available.');
-                    } else {
-                      setShowEndTimePicker(true);
-                    }
+                    setShowEndTimePicker(true);
                   }}
                 >
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
