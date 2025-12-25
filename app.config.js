@@ -30,7 +30,15 @@ export default {
       bundler: "metro"
     },
     plugins: [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          photosPermission: "The app accesses your photos to let you share them.",
+          cameraPermission: "The app accesses your camera to let you take photos."
+        }
+      ],
+      "expo-document-picker"
     ],
     scheme: "ducat",
     extra: {

@@ -208,7 +208,7 @@ export default function CreateEventScreen() {
 
       // Launch image picker with base64 option
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'images',
         allowsEditing: true,
         aspect: [16, 9], // Standard cover image aspect ratio
         quality: 0.8,
@@ -374,20 +374,8 @@ export default function CreateEventScreen() {
       
       console.log('Event created successfully:', result);
       
-      // Show toast message for 10 seconds
-      Toast.show({
-        type: 'success',
-        text1: 'Success',
-        text2: 'Event created successfully!',
-        visibilityTime: 10000, // 10 seconds
-        autoHide: true,
-        topOffset: 60,
-      });
-
-      // Redirect to home after 10 seconds
-      setTimeout(() => {
-        router.replace('/home');
-      }, 10000);
+      // Redirect to home immediately with success flag
+      router.replace('/home?eventCreated=true');
     } catch (err: any) {
       console.error('Failed to create event:', err);
       const errorMessage = err?.message || 'Failed to create event. Please try again.';
