@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ImageWithFallback } from './ImageWithFallback';
 
 interface Event {
-  id: number;
+  id: number | string;
   title: string;
   date: string;
   time: string;
@@ -17,7 +17,7 @@ interface Event {
 
 interface EventCardProps {
   event: Event;
-  onViewDetails: (id: number) => void;
+  onViewDetails: (id: number | string) => void;
 }
 
 export function EventCard({ event, onViewDetails }: EventCardProps) {

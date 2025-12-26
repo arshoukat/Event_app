@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -29,7 +29,7 @@ interface ApiEvent {
 }
 
 interface DisplayEvent {
-  id: number;
+  id: number | string; // Can be number for display or string (MongoDB ObjectId) for API
   title: string;
   date: string;
   time: string;
@@ -120,8 +120,15 @@ export default function HomeScreen() {
           }
         }
 
+        // Ensure ID is properly extracted - MongoDB ObjectIds are strings
+        const eventId = event.id ? String(event.id) : null;
+        if (!eventId) {
+          console.warn('Event missing ID:', event);
+        }
+
         return {
-          id: typeof event.id === 'string' ? parseInt(event.id) : event.id,
+          // Keep original ID as string (MongoDB ObjectId) for API calls
+          id: eventId || 'unknown', // Ensure ID is always a string
           title: event.title,
           date: formattedDate,
           time: formattedTime,
@@ -180,8 +187,18 @@ export default function HomeScreen() {
     ? events 
     : events.filter(event => event.category === selectedCategory);
 
-  const handleViewEvent = (eventId: number) => {
-    router.push(`/event-detail?id=${eventId}`);
+  const handleViewEvent = (eventId: number | string) => {
+    // Ensure eventId is valid before navigating
+    if (eventId === undefined || eventId === null || eventId === 'undefined' || eventId === 'null' || eventId === '' || eventId === 'unknown') {
+      console.error('Invalid event ID:', eventId);
+      Alert.alert('Error', 'Invalid event ID. Please try again.');
+      return;
+    }
+    // Convert to string for URL parameter - ensure it's properly encoded
+    const idString = String(eventId).trim();
+    console.log('Navigating to event detail with ID:', idString);
+    // Use encodeURIComponent to properly encode the ID in the URL
+    router.push(`/event-detail?id=${encodeURIComponent(idString)}`);
   };
 
   return (

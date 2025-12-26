@@ -513,7 +513,9 @@ export default function CreateEventScreen() {
                 value={formatDateForInput(formData.date)}
                 // @ts-ignore - onChange is supported on react-native-web
                 onChange={(e: any) => {
-                  const date = new Date(e.target.value);
+                  const dateValue = e?.target?.value || e?.nativeEvent?.text || '';
+                  if (!dateValue) return;
+                  const date = new Date(dateValue);
                   if (!isNaN(date.getTime())) {
                     handleInputChange('date', date);
                   }
@@ -524,8 +526,8 @@ export default function CreateEventScreen() {
             <TouchableOpacity 
               style={styles.dateButton}
               onPress={() => {
-                console.log('Date picker button pressed, opening picker...');
-                setShowDatePicker(true);
+                  console.log('Date picker button pressed, opening picker...');
+                  setShowDatePicker(true);
               }}
             >
               <Ionicons name="calendar-outline" size={20} color="#6b7280" />
@@ -550,7 +552,9 @@ export default function CreateEventScreen() {
                     value={formatTimeForInput(formData.startTime)}
                     // @ts-ignore - onChange is supported on react-native-web
                     onChange={(e: any) => {
-                      const [hours, minutes] = e.target.value.split(':');
+                      const timeValue = e?.target?.value || e?.nativeEvent?.text || '';
+                      if (!timeValue) return;
+                      const [hours, minutes] = timeValue.split(':');
                       const date = new Date();
                       date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                       handleInputChange('startTime', date);
@@ -561,7 +565,7 @@ export default function CreateEventScreen() {
                 <TouchableOpacity 
                   style={styles.dateButton}
                   onPress={() => {
-                    setShowStartTimePicker(true);
+                      setShowStartTimePicker(true);
                   }}
                 >
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
@@ -584,7 +588,9 @@ export default function CreateEventScreen() {
                     value={formatTimeForInput(formData.endTime)}
                     // @ts-ignore - onChange is supported on react-native-web
                     onChange={(e: any) => {
-                      const [hours, minutes] = e.target.value.split(':');
+                      const timeValue = e?.target?.value || e?.nativeEvent?.text || '';
+                      if (!timeValue) return;
+                      const [hours, minutes] = timeValue.split(':');
                       const date = new Date();
                       date.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                       handleInputChange('endTime', date);
@@ -595,7 +601,7 @@ export default function CreateEventScreen() {
                 <TouchableOpacity 
                   style={styles.dateButton}
                   onPress={() => {
-                    setShowEndTimePicker(true);
+                      setShowEndTimePicker(true);
                   }}
                 >
                   <Ionicons name="time-outline" size={20} color="#6b7280" />
