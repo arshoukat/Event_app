@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Logo } from './Logo';
 import { GradientText } from './GradientText';
+import { LanguageToggle } from './LanguageToggle';
 
 export function Header() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export function Header() {
           <Logo size={32} />
         </View>
         <View style={styles.iconRow}>
+          <LanguageToggle />
           <TouchableOpacity 
             style={styles.iconButton}
             onPress={() => router.push('/notifications')}

@@ -12,7 +12,8 @@ import { apiService } from '../services/api';
 import Toast from 'react-native-toast-message';
 
 interface ApiEvent {
-  id: string | number;
+  _id?: string; // MongoDB ID
+  id?: string | number; // Fallback for other formats
   title: string;
   description: string;
   date: string;
@@ -21,10 +22,10 @@ interface ApiEvent {
   location: string;
   venue?: string;
   category: string;
-  price: Array<{ name: string; price: number }> | number | string;
+  price: Array<{ name: string; price: number; _id?: string }> | number | string;
   imageUrl?: string | null;
   tags?: string[];
-  attendees?: number;
+  attendees?: number | string[];
   capacity?: number;
 }
 
@@ -69,18 +70,37 @@ export default function HomeScreen() {
       setError(null);
       
       // Fetch events from API
-      const response = await apiService.get<ApiEvent[] | { data: ApiEvent[] }>('/events');
+      const response = await apiService.get<ApiEvent[] | { success: boolean; data: ApiEvent[] } | { data: ApiEvent[] }>('/events');
       
-      // Handle different response formats (array or wrapped in data property)
+      console.log('[Home] Events API response:', response);
+      
+      // Handle different response formats
       let eventsArray: ApiEvent[] = [];
       if (Array.isArray(response)) {
         eventsArray = response;
-      } else if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
-        eventsArray = response.data;
+      } else if (response && typeof response === 'object') {
+        // Handle { success: true, data: [...] } format
+        if ('success' in response && 'data' in response && Array.isArray((response as { success: boolean; data: ApiEvent[] }).data)) {
+          eventsArray = (response as { success: boolean; data: ApiEvent[] }).data;
+        } 
+        // Handle { data: [...] } format
+        else if ('data' in response && Array.isArray((response as { data: ApiEvent[] }).data)) {
+          eventsArray = (response as { data: ApiEvent[] }).data;
+        }
       }
+      
+      console.log('[Home] Extracted events array, count:', eventsArray.length);
       
       // Transform API events to display format
       const transformedEvents: DisplayEvent[] = eventsArray.map((event) => {
+        // Extract ID - prefer _id (MongoDB) over id
+        const eventId = event._id ? String(event._id) : (event.id ? String(event.id) : null);
+        if (!eventId) {
+          console.error('Event missing ID:', event);
+          // Skip events without IDs instead of using 'unknown'
+          return null;
+        }
+        
         // Format date
         const eventDate = new Date(event.startTime || event.date);
         const formattedDate = eventDate.toLocaleDateString('en-US', {
@@ -108,37 +128,46 @@ export default function HomeScreen() {
           priceString = event.price;
         }
 
-        // Get image URL
+        // Get image URL - handle relative paths
         let imageUrl = '';
         if (event.imageUrl) {
-          // If it's a base64 string, use it directly
           if (event.imageUrl.startsWith('data:image')) {
+            // Base64 image
             imageUrl = event.imageUrl;
+          } else if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
+            // Full URL
+            imageUrl = event.imageUrl;
+          } else if (event.imageUrl.startsWith('/')) {
+            // Relative path - prepend base URL (without /api)
+            const baseUrl = process.env.EXPO_PUBLIC_API_URL 
+              ? process.env.EXPO_PUBLIC_API_URL.replace(/\/api$/, '')
+              : 'http://localhost:5001';
+            imageUrl = `${baseUrl}${event.imageUrl}`;
           } else {
-            // Otherwise, treat it as a URL
             imageUrl = event.imageUrl;
           }
         }
 
-        // Ensure ID is properly extracted - MongoDB ObjectIds are strings
-        const eventId = event.id ? String(event.id) : null;
-        if (!eventId) {
-          console.warn('Event missing ID:', event);
+        // Handle attendees - can be number or array
+        let attendeesCount = 0;
+        if (typeof event.attendees === 'number') {
+          attendeesCount = event.attendees;
+        } else if (Array.isArray(event.attendees)) {
+          attendeesCount = event.attendees.length;
         }
 
         return {
-          // Keep original ID as string (MongoDB ObjectId) for API calls
-          id: eventId || 'unknown', // Ensure ID is always a string
+          id: eventId, // Use the extracted ID (always a valid string)
           title: event.title,
           date: formattedDate,
           time: formattedTime,
           location: event.venue || event.location,
           category: event.category,
           image: imageUrl || 'https://via.placeholder.com/400x300?text=No+Image',
-          attendees: event.attendees || 0,
+          attendees: attendeesCount,
           price: priceString,
         };
-      });
+      }).filter((event): event is DisplayEvent => event !== null); // Filter out null events
 
       setEvents(transformedEvents);
     } catch (err: any) {

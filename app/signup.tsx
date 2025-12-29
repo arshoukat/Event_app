@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
 import { apiService } from '../services/api';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 type SignupStep = 'email' | 'otp' | 'profile';
 
@@ -164,6 +165,9 @@ export default function SignupScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.languageToggleContainer}>
+        <LanguageToggle />
+      </View>
       <View style={styles.header}>
         <Logo size={120} />
         {Platform.OS === 'web' ? (
@@ -399,6 +403,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageToggleContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 24,
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',

@@ -6,9 +6,34 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { apiService } from '../services/api';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+// Helper function to get base URL for images (API URL without /api)
+const getImageBaseUrl = (): string => {
+  // If EXPO_PUBLIC_API_URL is set, use it
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/api$/, '');
+  }
+  
+  // For physical devices, try to detect IP
+  if (Platform.OS !== 'web') {
+    const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+    if (hostUri) {
+      const ip = hostUri.split(':')[0];
+      if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+        return `http://${ip}:5001`;
+      }
+    }
+  }
+  
+  // Default to localhost
+  return 'http://localhost:5001';
+};
 
 interface ApiEvent {
-  id: string | number;
+  _id?: string; // MongoDB ID
+  id?: string | number; // Fallback for other formats
   title: string;
   description: string;
   date: string;
@@ -17,16 +42,27 @@ interface ApiEvent {
   location: string;
   venue?: string;
   category: string;
-  price: Array<{ name: string; price: number }> | number | string;
+  price: Array<{ name: string; price: number; _id?: string }> | number | string;
   imageUrl?: string | null;
   tags?: string[];
-  attendees?: number;
+  attendees?: number | string[]; // Can be number or array
   capacity?: number;
+  createdBy?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    avatar?: string;
+  };
   organizer?: {
     name?: string;
     email?: string;
     avatar?: string;
   };
+  visibility?: string;
+  invitedEmails?: string[];
+  licenseFile?: string | null;
+  iban?: string;
+  status?: string;
 }
 
 interface DisplayEvent {
@@ -58,12 +94,25 @@ export default function EventDetailScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchEventDetails();
+    console.log('[EventDetail] useEffect triggered, id:', id);
+    if (id) {
+      fetchEventDetails();
+    } else {
+      console.warn('[EventDetail] No ID provided in URL params');
+      setError('Event ID is missing');
+      setLoading(false);
+    }
   }, [id]);
 
   const fetchEventDetails = async () => {
+    console.log('[EventDetail] fetchEventDetails called');
+    console.log('[EventDetail] Raw id from params:', id);
+    console.log('[EventDetail] id type:', typeof id);
+    console.log('[EventDetail] id is array:', Array.isArray(id));
+    
     // Validate ID - check if it exists and is not "undefined"
     if (!id || id === 'undefined' || id === 'null' || id === 'unknown') {
+      console.error('[EventDetail] Invalid ID:', id);
       setError('Event ID is required');
       setLoading(false);
       return;
@@ -77,32 +126,56 @@ export default function EventDetailScreen() {
       let eventId: string;
       if (Array.isArray(id)) {
         eventId = id[0]?.trim() || '';
+        console.log('[EventDetail] ID was array, extracted:', eventId);
       } else {
         eventId = String(id).trim();
+        console.log('[EventDetail] ID was string, using:', eventId);
       }
 
       // Additional validation - ensure it's a valid ID
       if (!eventId || eventId === 'undefined' || eventId === 'null' || eventId === 'unknown' || eventId === '') {
+        console.error('[EventDetail] Invalid event ID after processing:', eventId);
         setError('Invalid event ID');
         setLoading(false);
         return;
       }
 
-      console.log('Fetching event details for ID:', eventId);
+      console.log('[EventDetail] Fetching event details for ID:', eventId);
+      console.log('[EventDetail] API endpoint will be: /events/' + eventId);
 
       // Fetch event from API - the ID is appended to the URL
-      const response = await apiService.get<ApiEvent | { data: ApiEvent }>(`/events/${eventId}`);
+      const response = await apiService.get<{ success: boolean; data: ApiEvent } | ApiEvent | { data: ApiEvent }>(`/events/${eventId}`);
       
-      console.log('Event details response:', response);
+      console.log('[EventDetail] Event details response received:', response);
+      console.log('[EventDetail] Response type:', typeof response);
+      console.log('[EventDetail] Response keys:', response ? Object.keys(response) : 'null');
       
       // Handle different response formats
       let eventData: ApiEvent;
-      if (Array.isArray(response)) {
-        eventData = response[0];
+      if (response && typeof response === 'object' && 'success' in response && 'data' in response) {
+        // Backend format: { success: true, data: {...} }
+        eventData = (response as { success: boolean; data: ApiEvent }).data;
       } else if (response && typeof response === 'object' && 'data' in response) {
-        eventData = response.data;
+        // Alternative format: { data: {...} }
+        eventData = (response as { data: ApiEvent }).data;
+      } else if (Array.isArray(response)) {
+        eventData = response[0];
       } else {
         eventData = response as ApiEvent;
+      }
+      
+      // Use _id if id is not present (MongoDB format)
+      if (!eventData.id && eventData._id) {
+        eventData.id = eventData._id;
+      }
+      
+      // Map createdBy to organizer if organizer is not present
+      if (!eventData.organizer && eventData.createdBy) {
+        eventData.organizer = {
+          name: eventData.createdBy.name,
+          email: eventData.createdBy.email,
+          avatar: eventData.createdBy.avatar
+        };
       }
 
       // Format date
@@ -147,19 +220,36 @@ export default function EventDetailScreen() {
         priceDisplay = eventData.price;
       }
 
-      // Get image URL
+      // Get image URL - handle relative paths
       let imageUrl = '';
       if (eventData.imageUrl) {
         if (eventData.imageUrl.startsWith('data:image')) {
+          // Base64 image
           imageUrl = eventData.imageUrl;
+        } else if (eventData.imageUrl.startsWith('http://') || eventData.imageUrl.startsWith('https://')) {
+          // Full URL
+          imageUrl = eventData.imageUrl;
+        } else if (eventData.imageUrl.startsWith('/')) {
+          // Relative path - prepend base URL (without /api)
+          const baseUrl = getImageBaseUrl();
+          imageUrl = `${baseUrl}${eventData.imageUrl}`;
+          console.log('Constructed image URL:', imageUrl);
         } else {
           imageUrl = eventData.imageUrl;
         }
       }
 
+      // Handle attendees - can be number or array
+      let attendeesCount = 0;
+      if (typeof eventData.attendees === 'number') {
+        attendeesCount = eventData.attendees;
+      } else if (Array.isArray(eventData.attendees)) {
+        attendeesCount = eventData.attendees.length;
+      }
+
       // Transform to display format
       const transformedEvent: DisplayEvent = {
-        id: typeof eventData.id === 'string' ? parseInt(eventData.id) : eventData.id,
+        id: typeof eventData.id === 'string' ? parseInt(eventData.id) : (typeof eventData.id === 'number' ? eventData.id : 0),
         title: eventData.title,
         date: formattedDate,
         time: formattedTime,
@@ -167,21 +257,25 @@ export default function EventDetailScreen() {
         fullAddress: eventData.location || eventData.venue || '',
         category: eventData.category,
         image: imageUrl || 'https://via.placeholder.com/400x300?text=No+Image',
-        attendees: eventData.attendees || 0,
+        attendees: attendeesCount,
         price: priceDisplay,
         tags: eventData.tags || [],
         description: eventData.description || 'No description available.',
         host: {
-          name: eventData.organizer?.name || 'Event Organizer',
-          avatar: eventData.organizer?.avatar || 'https://images.unsplash.com/photo-1704726135027-9c6f034cfa41?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1c2VyJTIwcHJvZmlsZSUyMGF2YXRhcnxlbnwxfHx8fDE3NjUzMDk4Nzh8MA&ixlib=rb-4.1.0&q=80&w=1080',
+          name: eventData.organizer?.name || eventData.createdBy?.name || 'Event Organizer',
+          avatar: eventData.organizer?.avatar || eventData.createdBy?.avatar || 'https://images.unsplash.com/photo-1704726135027-9c6f034cfa41?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1c2VyJTIwcHJvZmlsZSUyMGF2YXRhcnxlbnwxfHx8fDE3NjUzMDk4Nzh8MA&ixlib=rb-4.1.0&q=80&w=1080',
           followers: '0'
         }
       };
 
       setEvent(transformedEvent);
     } catch (err: any) {
-      console.error('Failed to fetch event details:', err);
-      const errorMessage = err?.message || 'Failed to load event details. Please try again.';
+      console.error('[EventDetail] Failed to fetch event details:', err);
+      console.error('[EventDetail] Error type:', typeof err);
+      console.error('[EventDetail] Error message:', err?.message);
+      console.error('[EventDetail] Error stack:', err?.stack);
+      
+      const errorMessage = err?.message || err?.toString() || 'Failed to load event details. Please try again.';
       setError(errorMessage);
       Alert.alert('Error', errorMessage);
     } finally {

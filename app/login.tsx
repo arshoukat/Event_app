@@ -7,6 +7,7 @@ import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 export default function LoginScreen() {
   const { t, isRTL } = useLanguage();
@@ -96,6 +97,9 @@ export default function LoginScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.languageToggleContainer}>
+        <LanguageToggle />
+      </View>
       <View style={styles.header}>
         <Logo size={120} />
         {Platform.OS === 'web' ? (
@@ -204,6 +208,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageToggleContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 24,
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',

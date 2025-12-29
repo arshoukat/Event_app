@@ -9,6 +9,7 @@ import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
 import { encode } from 'base-64';
 import Toast from 'react-native-toast-message';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 // Conditionally import ImagePicker
 let ImagePicker: any = null;
@@ -76,8 +77,6 @@ export default function CreateEventScreen() {
   });
 
   const [tagInput, setTagInput] = useState('');
-  const [inviteEmailInput, setInviteEmailInput] = useState('');
-  const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
   const [coverImage, setCoverImage] = useState('');
   const [coverImageBase64, setCoverImageBase64] = useState<string | null>(null);
   const [licenseFileUri, setLicenseFileUri] = useState<string | null>(null);
@@ -127,28 +126,6 @@ export default function CreateEventScreen() {
       ...prev,
       tags: prev.tags.filter((_, i) => i !== index)
     }));
-  };
-
-  const handleAddInviteEmail = () => {
-    const email = inviteEmailInput.trim();
-    if (email) {
-      // Basic email validation
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        Alert.alert('Error', 'Please enter a valid email address');
-        return;
-      }
-      if (invitedEmails.includes(email)) {
-        Alert.alert('Error', 'This email is already in the invite list');
-        return;
-      }
-      setInvitedEmails(prev => [...prev, email]);
-      setInviteEmailInput('');
-    }
-  };
-
-  const handleRemoveInviteEmail = (index: number) => {
-    setInvitedEmails(prev => prev.filter((_, i) => i !== index));
   };
 
   // Function to encode IBAN (using base64 encoding)
@@ -244,26 +221,20 @@ export default function CreateEventScreen() {
         }
       }
 
-      // Launch image picker with base64 option
+      // Launch image picker - DON'T enable base64, we'll send as file buffer
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: 'images',
         allowsEditing: true,
         aspect: [16, 9], // Standard cover image aspect ratio
         quality: 0.8,
-        base64: true, // Enable base64 encoding
+        base64: false, // Don't encode to base64 - we'll send as file
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0];
         setCoverImage(selectedImage.uri);
-        // Store base64 string if available
-        if (selectedImage.base64) {
-          // Format: data:image/jpeg;base64,{base64string}
-          const base64String = `data:image/jpeg;base64,${selectedImage.base64}`;
-          setCoverImageBase64(base64String);
-        } else {
-          setCoverImageBase64(null);
-        }
+        // Store the image URI for FormData upload (reusing coverImageBase64 state to store URI)
+        setCoverImageBase64(selectedImage.uri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -336,10 +307,6 @@ export default function CreateEventScreen() {
       Alert.alert('Error', t('createEvent.uploadLicenseRequired') || 'Please upload a license file');
       return;
     }
-    if (formData.visibility === 'private' && invitedEmails.length === 0) {
-      Alert.alert('Error', 'Please add at least one email address for private events');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -378,7 +345,7 @@ export default function CreateEventScreen() {
       }
       // For free events, price remains an empty array
 
-      // Prepare event data according to API format
+      // Prepare event data according to API format (without imageUrl - will be sent separately)
       const eventData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -391,29 +358,109 @@ export default function CreateEventScreen() {
         price: price, // Now an array of seat types with prices
         capacity: formData.capacity ? parseInt(formData.capacity) : undefined,
         status: 'published', // You can change this to 'draft' if needed
-        imageUrl: coverImageBase64 || null, // Use base64 if available, otherwise null
         tags: formData.tags, // Tags array
         visibility: formData.visibility, // Privacy/visibility field
-        invitedEmails: formData.visibility === 'private' ? invitedEmails : undefined, // Invited emails if private
         licenseFile: formData.requiresLicense && formData.licenseFile ? formData.licenseFile : undefined, // License file if required
         iban: formData.isPaid ? encodeIBAN(formData.iban) : undefined, // Encoded IBAN for paid events
       };
 
       console.log('Event data being sent:', eventData);
       console.log('Cover image URI:', coverImage);
-      console.log('Cover image base64 available:', !!coverImageBase64);
 
-      console.log('Creating event with data:', eventData);
+      // If there's a cover image, send it as FormData (multipart/form-data)
+      if (coverImage && coverImageBase64) {
+        // Create FormData for multipart/form-data upload
+        const formDataToSend = new FormData();
+        
+        // Add all event data as JSON string (backend will parse this)
+        formDataToSend.append('eventData', JSON.stringify(eventData));
+        
+        // Add the image file
+        const imageUri = coverImageBase64;
+        const filename = imageUri.split('/').pop() || 'cover-image.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
+        
+        // For React Native, FormData file format
+        formDataToSend.append('coverImage', {
+          uri: imageUri,
+          type: type,
+          name: filename,
+        } as any);
 
-      // Call the API - using the events endpoint
-      // Note: Ensure API_URL in services/api.ts matches your backend URL
-      // If your events API is on port 5001, update EXPO_PUBLIC_API_URL or the default in api.ts
-      const result = await apiService.post('/events', eventData);
-      
-      console.log('Event created successfully:', result);
-      
-      // Redirect to home immediately with success flag
-      router.replace('/home?eventCreated=true');
+        console.log('Sending event with image as FormData');
+
+        // Get API URL and token
+        // Access the private method via type assertion (since getBaseUrl is private)
+        const apiServiceInternal = apiService as any;
+        const baseUrl = process.env.EXPO_PUBLIC_API_URL || apiServiceInternal.getBaseUrl();
+        const token = await storageService.getToken();
+        
+        // Ensure baseUrl has /api suffix
+        const apiBaseUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
+        const url = `${apiBaseUrl}/events`;
+        
+        console.log('Uploading to:', url);
+
+        // Send FormData request
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+            // Don't set Content-Type - fetch will set it automatically with boundary for FormData
+          },
+          body: formDataToSend,
+        });
+
+        if (!response.ok) {
+          let errorMessage = `HTTP error! status: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch (e) {
+            const text = await response.text().catch(() => '');
+            if (text) errorMessage = text;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('Event created successfully:', result);
+        
+        // Show success toast
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Event created successfully',
+          visibilityTime: 10000,
+        });
+
+        // Redirect to home after a short delay
+        setTimeout(() => {
+          router.replace('/home?eventCreated=true');
+        }, 1000);
+      } else {
+        // No image, send as JSON (existing method)
+        eventData.imageUrl = null;
+        
+        console.log('Creating event without image as JSON:', eventData);
+        
+        const result = await apiService.post('/events', eventData);
+        console.log('Event created successfully:', result);
+        
+        // Show success toast
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Event created successfully',
+          visibilityTime: 10000,
+        });
+
+        // Redirect to home after a short delay
+        setTimeout(() => {
+          router.replace('/home?eventCreated=true');
+        }, 1000);
+      }
     } catch (err: any) {
       console.error('Failed to create event:', err);
       const errorMessage = err?.message || 'Failed to create event. Please try again.';
@@ -431,15 +478,18 @@ export default function CreateEventScreen() {
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('createEvent.title')}</Text>
-        <TouchableOpacity 
-          onPress={handleSubmit} 
-          style={[styles.publishButton, isSubmitting && styles.publishButtonDisabled]}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.publishButtonText}>
-            {isSubmitting ? 'Publishing...' : t('createEvent.publish')}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <LanguageToggle />
+          <TouchableOpacity 
+            onPress={handleSubmit} 
+            style={[styles.publishButton, isSubmitting && styles.publishButtonDisabled]}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.publishButtonText}>
+              {isSubmitting ? 'Publishing...' : t('createEvent.publish')}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -983,9 +1033,9 @@ export default function CreateEventScreen() {
         {formData.isPaid && (
           <View style={styles.section}>
             <Text style={styles.label}>
-              {t('createEvent.paymentStructure')} <Text style={styles.required}>*</Text>
+              {t('createEvent.seatType')} <Text style={styles.required}>*</Text>
             </Text>
-            <Text style={styles.hintText}>{t('createEvent.paymentStructureHint')}</Text>
+            <Text style={styles.hintText}>{t('createEvent.seatTypeHint')}</Text>
             
             {/* Existing Seat Types */}
             {formData.seatTypes.length > 0 && (
@@ -1016,7 +1066,7 @@ export default function CreateEventScreen() {
                   onPress={() => setShowSeatTypePicker(true)}
                 >
                   <Text style={newSeatType.name ? styles.inputText : styles.placeholderText}>
-                    {newSeatType.name || t('createEvent.selectSeatType') || 'Select Seat Type'}
+                    {newSeatType.name || t('createEvent.seatTypePlaceholder') || 'Select Seat Type'}
                   </Text>
                   <Ionicons name="chevron-down" size={20} color="#6b7280" style={styles.dropdownIcon} />
                 </TouchableOpacity>
@@ -1240,51 +1290,6 @@ export default function CreateEventScreen() {
             />
           </View>
 
-          {/* Invite Emails - Only show when visibility is private */}
-          {formData.visibility === 'private' && (
-            <View style={styles.inviteSection}>
-              <Text style={styles.label}>
-                {t('createEvent.inviteEmails') || 'Invite by Email'} <Text style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.tagInputRow}>
-                <TextInput
-                  style={[styles.input, styles.tagInput]}
-                  value={inviteEmailInput}
-                  onChangeText={setInviteEmailInput}
-                  placeholder={t('createEvent.inviteEmailPlaceholder') || 'Enter email address'}
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onSubmitEditing={handleAddInviteEmail}
-                />
-                <TouchableOpacity
-                  style={[styles.addTagButton, !inviteEmailInput.trim() && styles.addTagButtonDisabled]}
-                  onPress={handleAddInviteEmail}
-                  disabled={!inviteEmailInput.trim()}
-                >
-                  <Text style={styles.addTagButtonText}>{t('createEvent.add') || 'Add'}</Text>
-                </TouchableOpacity>
-              </View>
-              {invitedEmails.length > 0 && (
-                <View style={styles.tagsContainer}>
-                  {invitedEmails.map((email, index) => (
-                    <View key={index} style={styles.tag}>
-                      <Text style={styles.tagText}>{email}</Text>
-                      <TouchableOpacity onPress={() => handleRemoveInviteEmail(index)}>
-                        <Ionicons name="close-circle" size={16} color="#6b7280" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {invitedEmails.length === 0 && (
-                <Text style={styles.hintText}>
-                  {t('createEvent.inviteEmailHint') || 'Add email addresses of people you want to invite to this private event'}
-                </Text>
-              )}
-            </View>
-          )}
         </View>
       </ScrollView>
     </SafeAreaView>
