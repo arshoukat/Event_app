@@ -66,7 +66,7 @@ interface ApiEvent {
 }
 
 interface DisplayEvent {
-  id: number;
+  id: string | number; // Keep as string for MongoDB ObjectIds
   title: string;
   date: string;
   time: string;
@@ -123,12 +123,13 @@ export default function EventDetailScreen() {
       setError(null);
 
       // Extract and validate event ID from URL parameters
+      // useLocalSearchParams automatically decodes URL-encoded values
       let eventId: string;
       if (Array.isArray(id)) {
-        eventId = id[0]?.trim() || '';
+        eventId = String(id[0]); // Get first element if array
         console.log('[EventDetail] ID was array, extracted:', eventId);
       } else {
-        eventId = String(id).trim();
+        eventId = String(id);
         console.log('[EventDetail] ID was string, using:', eventId);
       }
 
@@ -248,8 +249,9 @@ export default function EventDetailScreen() {
       }
 
       // Transform to display format
+      // Keep ID as string for MongoDB ObjectIds - do NOT convert to number
       const transformedEvent: DisplayEvent = {
-        id: typeof eventData.id === 'string' ? parseInt(eventData.id) : (typeof eventData.id === 'number' ? eventData.id : 0),
+        id: eventData.id ? String(eventData.id) : (eventData._id ? String(eventData._id) : ''),
         title: eventData.title,
         date: formattedDate,
         time: formattedTime,
@@ -428,7 +430,7 @@ export default function EventDetailScreen() {
         </View>
         <TouchableOpacity 
           style={styles.bookButton}
-          onPress={() => router.push(`/ticket-booking?id=${event.id}`)}
+          onPress={() => router.push(`/ticket-booking?id=${encodeURIComponent(String(event.id))}`)}
         >
           <Text style={styles.bookButtonText}>{t('event.bookTicket')}</Text>
         </TouchableOpacity>

@@ -57,7 +57,7 @@ export default function NotificationsScreen() {
               style={[styles.notificationItem, !notification.read && styles.notificationUnread]}
               onPress={() => {
                 if (notification.eventId) {
-                  router.push(`/event-detail?id=${notification.eventId}`);
+                  router.push(`/event-detail?id=${encodeURIComponent(String(notification.eventId))}`);
                 }
               }}
             >

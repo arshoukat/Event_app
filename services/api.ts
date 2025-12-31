@@ -84,7 +84,7 @@ const getAPIURL = (): string => {
   }
 
   // For web or fallback, use localhost
-  const apiUrl = 'http://localhost:5001/api';
+  const apiUrl = 'http://192.168.100.234:5001/api';
   console.log(`[API] Using default: ${apiUrl}`);
   return apiUrl;
 };
