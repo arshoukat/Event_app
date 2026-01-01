@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
 import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
+import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 export default function LoginScreen() {
   const { t, isRTL } = useLanguage();
@@ -13,10 +16,80 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // TODO: Implement actual login logic
-    router.replace('/home');
+  const handleLogin = async () => {
+    // Validation
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+    if (!password) {
+      Alert.alert('Error', 'Please enter your password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await apiService.post<{
+        success: boolean;
+        message: string;
+        data: {
+          _id: string;
+          name: string;
+          email: string;
+          role: string;
+          token: string;
+        };
+      }>('/auth/login', {
+        email,
+        password,
+      });
+
+      if (response.success && response.data?.token) {
+        // Store token and user data
+        await storageService.setToken(response.data.token);
+        await storageService.setUser({
+          _id: response.data._id,
+          name: response.data.name,
+          email: response.data.email,
+          role: response.data.role,
+        });
+
+        // Redirect to home page immediately
+        router.replace('/home');
+      } else {
+        throw new Error(response.message || 'Login failed');
+      }
+    } catch (err: any) {
+      console.error('Login failed', err);
+      
+      // Extract user-friendly error message
+      let errorMessage = 'Failed to login. Please check your credentials and try again.';
+      
+      if (err.message) {
+        // If it's a 401, provide a more specific message
+        if (err.status === 401) {
+          errorMessage = err.message.includes('401') 
+            ? 'Invalid email or password. Please check your credentials and try again.'
+            : err.message;
+        } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
+        } else if (!err.message.includes('HTTP error')) {
+          // Use the error message if it's not a generic HTTP error
+          errorMessage = err.message;
+        }
+      }
+      
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -24,6 +97,9 @@ export default function LoginScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.languageToggleContainer}>
+        <LanguageToggle />
+      </View>
       <View style={styles.header}>
         <Logo size={120} />
         {Platform.OS === 'web' ? (
@@ -102,8 +178,14 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
+        <TouchableOpacity 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Logging in...' : t('auth.signIn')}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -126,6 +208,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageToggleContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 24,
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',
@@ -229,6 +317,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',

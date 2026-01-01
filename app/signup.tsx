@@ -5,6 +5,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
 import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
+import { apiService } from '../services/api';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 type SignupStep = 'email' | 'otp' | 'profile';
 
@@ -20,9 +22,12 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [loadingSend, setLoadingSend] = useState(false);
+  const [loadingVerify, setLoadingVerify] = useState(false);
+  const [loadingSignup, setLoadingSignup] = useState(false);
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address');
       return;
@@ -32,21 +37,47 @@ export default function SignupScreen() {
       Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
-    console.log('Sending OTP to:', email);
-    setStep('otp');
+    setLoadingSend(true);
+    try {
+      await apiService.post('/auth/signup/initiate', { email });
+      Alert.alert('Success', 'OTP sent to your email');
+      setStep('otp');
+    } catch (err) {
+      console.error('Send OTP failed', err);
+      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoadingSend(false);
+    }
   };
 
-  const handleVerifyOTP = () => {
+  const handleVerifyOTP = async () => {
     const otpCode = otp.join('');
     if (otpCode.length === 6) {
-      console.log('Verifying OTP:', otpCode);
-      setStep('profile');
+      setLoadingVerify(true);
+      try {
+        await apiService.post('/auth/signup/verify', { email, otp: otpCode });
+        Alert.alert('Success', 'OTP verified');
+        setStep('profile');
+      } catch (err) {
+        console.error('Verify OTP failed', err);
+        Alert.alert('Error', 'Invalid or expired OTP. Please try again.');
+      } finally {
+        setLoadingVerify(false);
+      }
     } else {
       Alert.alert('Error', 'Please enter the complete 6-digit code');
     }
   };
 
-  const handleCompleteSignup = () => {
+  const handleCompleteSignup = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Error', 'Please enter your full name');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
     if (password !== confirmPassword) {
       Alert.alert('Error', t('auth.passwordsDoNotMatch'));
       return;
@@ -55,13 +86,51 @@ export default function SignupScreen() {
       Alert.alert('Error', 'Please accept the terms and conditions');
       return;
     }
-    // TODO: Implement actual signup logic
-    router.replace('/home');
+    setLoadingSignup(true);
+    try {
+      const response = await apiService.post('/auth/signup/complete', {
+        email,
+        name: fullName,
+        password,
+        confirmPassword,
+      });
+      console.log('Signup successful:', response);
+      
+      // Reset loading state
+      setLoadingSignup(false);
+      
+      // Show success alert
+      Alert.alert(
+        'Success', 
+        'Your account is created successfully, please login',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              console.log('Alert OK pressed');
+            }
+          }
+        ],
+        { cancelable: false }
+      );
+      
+      // Redirect immediately after showing alert
+      // Using setTimeout to ensure Alert is displayed first
+      setTimeout(() => {
+        console.log('Redirecting to login page...');
+        router.replace('/login');
+      }, 500);
+    } catch (err: any) {
+      console.error('Signup failed', err);
+      setLoadingSignup(false);
+      const errorMessage = err?.message || 'Failed to create account. Please try again.';
+      Alert.alert('Error', errorMessage);
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) return;
-    
+
     const newOtp = [...otp];
     newOtp[index] = value.replace(/[^0-9]/g, '');
     setOtp(newOtp);
@@ -78,19 +147,27 @@ export default function SignupScreen() {
     }
   };
 
-  const handleResendOTP = () => {
+  const handleResendOTP = async () => {
     setIsResending(true);
-    setTimeout(() => {
+    try {
+      await apiService.post('/auth/signup/initiate', { email });
+      Alert.alert('Success', 'OTP resent to your email');
+    } catch (err) {
+      console.error('Resend OTP failed', err);
+      Alert.alert('Error', 'Failed to resend OTP');
+    } finally {
       setIsResending(false);
-      console.log('OTP resent to:', email);
-    }, 2000);
+    }
   };
 
   return (
-    <ScrollView 
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.languageToggleContainer}>
+        <LanguageToggle />
+      </View>
       <View style={styles.header}>
         <Logo size={120} />
         {Platform.OS === 'web' ? (
@@ -116,11 +193,11 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('auth.emailRequired')}</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="mail-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color="#9ca3af"
+                style={[styles.inputIcon, isRTL && styles.inputIconRTL]}
               />
               <TextInput
                 style={[styles.input, isRTL && styles.inputRTL]}
@@ -135,8 +212,14 @@ export default function SignupScreen() {
             <Text style={styles.hint}>{t('auth.verificationCode')}</Text>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleSendOTP}>
-            <Text style={styles.buttonText}>{t('auth.sendOTP')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingSend && styles.buttonDisabled]} 
+            onPress={handleSendOTP}
+            disabled={loadingSend}
+          >
+            <Text style={styles.buttonText}>
+              {loadingSend ? 'Sending...' : t('auth.sendOTP')}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -185,8 +268,14 @@ export default function SignupScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleVerifyOTP}>
-            <Text style={styles.buttonText}>{t('auth.verifyAndContinue')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingVerify && styles.buttonDisabled]} 
+            onPress={handleVerifyOTP}
+            disabled={loadingVerify}
+          >
+            <Text style={styles.buttonText}>
+              {loadingVerify ? 'Verifying...' : t('auth.verifyAndContinue')}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -197,11 +286,11 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('auth.fullName')}</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="person-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color="#9ca3af"
+                style={[styles.inputIcon, isRTL && styles.inputIconRTL]}
               />
               <TextInput
                 style={[styles.input, isRTL && styles.inputRTL]}
@@ -217,11 +306,11 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('auth.createPassword')}</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="lock-closed-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#9ca3af"
+                style={[styles.inputIcon, isRTL && styles.inputIconRTL]}
               />
               <TextInput
                 style={[styles.input, isRTL && styles.inputRTL]}
@@ -235,10 +324,10 @@ export default function SignupScreen() {
                 onPress={() => setShowPassword(!showPassword)}
                 style={[styles.eyeIcon, isRTL && styles.eyeIconRTL]}
               >
-                <Ionicons 
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
-                  size={20} 
-                  color="#9ca3af" 
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#9ca3af"
                 />
               </TouchableOpacity>
             </View>
@@ -247,11 +336,11 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>{t('auth.confirmPassword')}</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="lock-closed-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#9ca3af"
+                style={[styles.inputIcon, isRTL && styles.inputIconRTL]}
               />
               <TextInput
                 style={[styles.input, isRTL && styles.inputRTL]}
@@ -276,8 +365,14 @@ export default function SignupScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleCompleteSignup}>
-            <Text style={styles.buttonText}>{t('auth.createAccountButton')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingSignup && styles.buttonDisabled]} 
+            onPress={handleCompleteSignup}
+            disabled={loadingSignup}
+          >
+            <Text style={styles.buttonText}>
+              {loadingSignup ? 'Creating...' : t('auth.createAccountButton')}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -308,6 +403,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageToggleContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 24,
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',
@@ -393,6 +494,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',

@@ -24,7 +24,7 @@ export default function TicketsScreen() {
     <TouchableOpacity
       key={ticket.id}
       style={styles.ticketCard}
-      onPress={() => router.push(`/event-detail?id=${ticket.eventId}`)}
+      onPress={() => router.push(`/event-detail?id=${encodeURIComponent(String(ticket.eventId))}`)}
     >
       <ImageWithFallback
         src={ticket.eventImage}

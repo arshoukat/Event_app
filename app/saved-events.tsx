@@ -32,7 +32,7 @@ export default function SavedEventsScreen() {
                 ...event,
                 price: typeof event.price === 'number' ? `$${event.price}` : event.price
               }}
-              onViewDetails={(id) => router.push(`/event-detail?id=${id}`)}
+              onViewDetails={(id) => router.push(`/event-detail?id=${encodeURIComponent(String(id))}`)}
             />
           ))
         ) : (
