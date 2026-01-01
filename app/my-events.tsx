@@ -1,52 +1,178 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '../components/Header';
 import { BottomNav } from '../components/BottomNav';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { mockEvents } from '../data/mockData';
 import { EventCard } from '../components/EventCard';
+import { apiService } from '../services/api';
+
+interface ApiEvent {
+  _id?: string;
+  id?: string | number;
+  title: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  location: string;
+  venue?: string;
+  category: string;
+  price: Array<{ name: string; price: number; _id?: string }> | number | string;
+  imageUrl?: string | null;
+  tags?: string[];
+  attendees?: number | string[];
+  capacity?: number;
+  createdBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+}
+
+interface DisplayEvent {
+  id: number | string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  category: string;
+  image: string;
+  attendees: number;
+  price: string;
+}
 
 export default function MyEventsScreen() {
   const { t } = useLanguage();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'ongoing' | 'past'>('upcoming');
+  const [events, setEvents] = useState<DisplayEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Helper function to parse date string like "Dec 15, 2025"
-  const parseEventDate = (dateStr: string): Date => {
-    const months: { [key: string]: number } = {
-      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-    };
-    const parts = dateStr.split(', ');
-    if (parts.length === 2) {
-      const datePart = parts[0].split(' ');
-      const month = months[datePart[0]] || 0;
-      const day = parseInt(datePart[1]) || 1;
-      const year = parseInt(parts[1]) || new Date().getFullYear();
-      return new Date(year, month, day);
+  // Fetch events when component mounts or tab changes
+  useEffect(() => {
+    fetchEvents();
+  }, [activeTab]);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Determine endpoint based on active tab
+      const endpoint = `/events/my/${activeTab}`;
+      
+      console.log('[MyEvents] Fetching events from:', endpoint);
+      
+      // Fetch events from API
+      const response = await apiService.get<{ success: boolean; data: ApiEvent[]; count: number; message: string }>(endpoint);
+      
+      console.log('[MyEvents] API response:', response);
+      
+      // Extract events array from response
+      let eventsArray: ApiEvent[] = [];
+      if (response && typeof response === 'object') {
+        if ('success' in response && 'data' in response && Array.isArray(response.data)) {
+          eventsArray = response.data;
+        } else if ('data' in response && Array.isArray((response as { data: ApiEvent[] }).data)) {
+          eventsArray = (response as { data: ApiEvent[] }).data;
+        }
+      }
+      
+      console.log('[MyEvents] Extracted events array, count:', eventsArray.length);
+      
+      // Transform API events to display format
+      const transformedEvents: DisplayEvent[] = eventsArray.map((event) => {
+        // Extract ID
+        const eventId = event._id ? String(event._id) : (event.id ? String(event.id) : '');
+        
+        // Format date from startDate (ISO datetime string)
+        const eventDate = new Date(event.startDate);
+        const formattedDate = eventDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+
+        // Format time from startDate
+        const formattedTime = eventDate.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+
+        // Format price
+        let priceString = 'Free';
+        if (Array.isArray(event.price) && event.price.length > 0) {
+          const minPrice = Math.min(...event.price.map(p => p.price));
+          priceString = `$${minPrice}`;
+        } else if (typeof event.price === 'number') {
+          priceString = `$${event.price}`;
+        } else if (typeof event.price === 'string' && event.price !== 'Free') {
+          priceString = event.price;
+        }
+
+        // Get image URL - handle relative paths
+        let imageUrl = '';
+        if (event.imageUrl) {
+          if (event.imageUrl.startsWith('data:image')) {
+            // Base64 image
+            imageUrl = event.imageUrl;
+          } else if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
+            // Full URL
+            imageUrl = event.imageUrl;
+          } else if (event.imageUrl.startsWith('/')) {
+            // Relative path - prepend base URL (without /api)
+            const baseUrl = process.env.EXPO_PUBLIC_API_URL 
+              ? process.env.EXPO_PUBLIC_API_URL.replace(/\/api$/, '')
+              : 'http://localhost:5001';
+            imageUrl = `${baseUrl}${event.imageUrl}`;
+          } else {
+            imageUrl = event.imageUrl;
+          }
+        }
+
+        // Get attendees count
+        let attendeesCount = 0;
+        if (typeof event.attendees === 'number') {
+          attendeesCount = event.attendees;
+        } else if (Array.isArray(event.attendees)) {
+          attendeesCount = event.attendees.length;
+        }
+
+        return {
+          id: eventId,
+          title: event.title,
+          date: formattedDate,
+          time: formattedTime,
+          location: event.venue || event.location,
+          category: event.category,
+          image: imageUrl || 'https://via.placeholder.com/400x300?text=No+Image',
+          attendees: attendeesCount,
+          price: priceString
+        };
+      }).filter((event) => event.id !== ''); // Filter out events without IDs
+
+      setEvents(transformedEvents);
+    } catch (err: any) {
+      console.error('[MyEvents] Failed to fetch events:', err);
+      setError(err.message || 'Failed to load events. Please try again.');
+      
+      // Handle unauthorized - redirect to login
+      if (err.status === 401) {
+        Alert.alert('Session Expired', 'Please login again to view your events.', [
+          { text: 'OK', onPress: () => router.push('/login') }
+        ]);
+      } else {
+        Alert.alert('Error', err.message || 'Failed to load events. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-    return new Date(dateStr);
   };
-
-  // Mock user's created events - filter by date to show upcoming vs past
-  const now = new Date();
-  const myEvents = mockEvents; // All events are user's events for now
-  
-  // Split events into upcoming and past based on date
-  const upcomingEvents = myEvents.filter(event => {
-    const eventDate = parseEventDate(event.date);
-    return eventDate >= now;
-  });
-  
-  const pastEvents = myEvents.filter(event => {
-    const eventDate = parseEventDate(event.date);
-    return eventDate < now;
-  });
-  
-  const events = activeTab === 'upcoming' ? upcomingEvents : pastEvents;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -62,6 +188,14 @@ export default function MyEventsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.tab, activeTab === 'ongoing' && styles.tabActive]}
+          onPress={() => setActiveTab('ongoing')}
+        >
+          <Text style={[styles.tabText, activeTab === 'ongoing' && styles.tabTextActive]}>
+            {t('On Going')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'past' && styles.tabActive]}
           onPress={() => setActiveTab('past')}
         >
@@ -72,25 +206,47 @@ export default function MyEventsScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        {events.length > 0 ? (
+        {loading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color="#D4A444" />
+            <Text style={styles.loadingText}>Loading events...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
+            <Text style={styles.emptyTitle}>Error Loading Events</Text>
+            <Text style={styles.emptyText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={fetchEvents}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : events.length > 0 ? (
           events.map(event => (
             <EventCard
               key={event.id}
-              event={{
-                ...event,
-                price: typeof event.price === 'number' ? `$${event.price}` : event.price
-              }}
-              onViewDetails={(id) => router.push(`/event-detail?id=${encodeURIComponent(String(id))}`)}
+              event={event}
+              onViewDetails={(id) => router.push(`/event-detail?id=${id}`)}
             />
           ))
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="calendar-outline" size={64} color="#d1d5db" />
             <Text style={styles.emptyTitle}>
-              {activeTab === 'upcoming' ? t('myEvents.noUpcoming') : t('myEvents.noPast')}
+              {activeTab === 'upcoming' 
+                ? t('myEvents.noUpcoming') 
+                : activeTab === 'ongoing'
+                ? (t('myEvents.noOngoing') || 'No ongoing events')
+                : t('myEvents.noPast')}
             </Text>
             <Text style={styles.emptyText}>
-              {activeTab === 'upcoming' ? t('myEvents.bookTickets') : t('myEvents.attendedEvents')}
+              {activeTab === 'upcoming' 
+                ? t('myEvents.bookTickets') 
+                : activeTab === 'ongoing'
+                ? (t('myEvents.ongoingEventsDesc') || 'You have no events happening right now')
+                : t('myEvents.attendedEvents')}
             </Text>
           </View>
         )}
@@ -159,5 +315,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
+  },
+  loadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+    minHeight: 400,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: '#D4A444',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
