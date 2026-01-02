@@ -78,6 +78,8 @@ export const translations = {
     'home.createEvent': 'Create Event',
     'home.attendees': 'attendees',
     'home.free': 'Free',
+    'home.search': 'Search',
+    'home.searchPlaceholder': 'Search events by name...',
     
     // Navigation
     'nav.home': 'Home',
@@ -367,6 +369,8 @@ export const translations = {
     'home.createEvent': 'إنشاء فعالية',
     'home.attendees': 'حضور',
     'home.free': 'مجاني',
+    'home.search': 'بحث',
+    'home.searchPlaceholder': 'ابحث عن الفعاليات بالاسم...',
     
     // Navigation
     'nav.home': 'الرئيسية',

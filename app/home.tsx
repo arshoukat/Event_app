@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -46,6 +46,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [events, setEvents] = useState<DisplayEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -211,10 +212,17 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  // Filter events by category
-  const filteredEvents = selectedCategory === 'all' 
-    ? events 
-    : events.filter(event => event.category === selectedCategory);
+  // Filter events by category and search query
+  const filteredEvents = events.filter(event => {
+    // Filter by category
+    const matchesCategory = selectedCategory === 'all' || event.category === selectedCategory;
+    
+    // Filter by search query (case-insensitive search on title)
+    const matchesSearch = searchQuery.trim() === '' || 
+      event.title.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    
+    return matchesCategory && matchesSearch;
+  });
 
   const handleViewEvent = (eventId: number | string) => {
     // Ensure eventId is valid before navigating
@@ -258,6 +266,28 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('home.searchPlaceholder')}
+            placeholderTextColor="#9ca3af"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          )}
+        </View>
+
         <CategoryFilter
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
@@ -291,7 +321,11 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={48} color="#9ca3af" />
-              <Text style={styles.emptyStateText}>No events found in this category</Text>
+              <Text style={styles.emptyStateText}>
+                {searchQuery.trim() 
+                  ? 'No events found matching your search' 
+                  : 'No events found in this category'}
+              </Text>
             </View>
           )}
         </View>
@@ -327,6 +361,30 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#000',
+    padding: 0,
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   createButton: {
     flexDirection: 'row',
