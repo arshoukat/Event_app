@@ -238,14 +238,14 @@ export default function MyEventsScreen() {
               {activeTab === 'upcoming' 
                 ? t('myEvents.noUpcoming') 
                 : activeTab === 'ongoing'
-                ? (t('myEvents.noOngoing') || 'No ongoing events')
+                ? (t('No ongoing events') || 'No ongoing events')
                 : t('myEvents.noPast')}
             </Text>
             <Text style={styles.emptyText}>
               {activeTab === 'upcoming' 
                 ? t('myEvents.bookTickets') 
                 : activeTab === 'ongoing'
-                ? (t('myEvents.ongoingEventsDesc') || 'You have no events happening right now')
+                ? (t('You have no events happening right now') || 'You have no events happening right now')
                 : t('myEvents.attendedEvents')}
             </Text>
           </View>

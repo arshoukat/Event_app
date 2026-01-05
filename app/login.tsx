@@ -63,7 +63,7 @@ export default function LoginScreen() {
           email: response.data.email,
           phone: response.data.phone,
           bio: response.data.bio,
-          iban: response.data.iban, // Save IBAN from login response
+          iban: response.data.iban, // Save IBAN from login response (may be undefined if backend fails to decrypt)
           role: response.data.role,
         });
 
@@ -86,10 +86,18 @@ export default function LoginScreen() {
       // Check error data first (contains the backend response)
       if (err.data && err.data.message) {
         errorMessage = err.data.message;
+        // If it's a backend function error, provide a more user-friendly message
+        if (errorMessage.includes('getDecryptedIban is not a function')) {
+          errorMessage = 'Login service error. Please contact support or try again later.';
+        }
       }
       // Check error message (API service extracts message from response)
       else if (err.message && !err.message.includes('HTTP error')) {
         errorMessage = err.message;
+        // If it's a backend function error, provide a more user-friendly message
+        if (errorMessage.includes('getDecryptedIban is not a function')) {
+          errorMessage = 'Login service error. Please contact support or try again later.';
+        }
       }
       
       // Always show alert popup
