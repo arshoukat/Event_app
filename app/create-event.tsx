@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
+import { decode } from 'base-64';
 import Toast from 'react-native-toast-message';
 import { LanguageToggle } from '../components/LanguageToggle';
 
