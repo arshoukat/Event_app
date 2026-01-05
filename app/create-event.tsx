@@ -7,7 +7,6 @@ import { useRouter } from 'expo-router';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
-import { encode, decode } from 'base-64';
 import Toast from 'react-native-toast-message';
 import { LanguageToggle } from '../components/LanguageToggle';
 
@@ -323,12 +322,10 @@ export default function CreateEventScreen() {
     }));
   };
 
-  // Function to encode IBAN (using base64 encoding)
-  const encodeIBAN = (iban: string): string => {
-    // Remove spaces and convert to uppercase
-    const cleanedIBAN = iban.replace(/\s/g, '').toUpperCase();
-    // Encode to base64
-    return encode(cleanedIBAN);
+  // Function to clean IBAN (remove spaces and convert to uppercase)
+  const cleanIBAN = (iban: string): string => {
+    // Remove spaces and convert to uppercase (backend will handle validation)
+    return iban.replace(/\s/g, '').toUpperCase();
   };
 
   // IBAN validation function
@@ -776,7 +773,7 @@ export default function CreateEventScreen() {
         tags: formData.tags, // Tags array
         visibility: formData.visibility, // Privacy/visibility field
         licenseFile: formData.requiresLicense && formData.licenseFile ? formData.licenseFile : undefined, // License file if required
-        iban: formData.isPaid ? encodeIBAN(formData.iban) : undefined, // Encoded IBAN for paid events
+        iban: formData.isPaid ? cleanIBAN(formData.iban) : undefined, // Cleaned IBAN for paid events (backend handles validation)
       };
 
       console.log('Event data being sent:', eventData);
