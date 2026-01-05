@@ -250,6 +250,9 @@ export const translations = {
     'editProfile.location': 'Location',
     'editProfile.bio': 'Bio',
     'editProfile.bioPlaceholder': 'Tell us about yourself...',
+    'editProfile.phonePlaceholder': '5XXXXXXXX',
+    'editProfile.completeProfileMessage': 'Please complete your profile',
+    'editProfile.phoneKSAPrefix': '+966',
     
     // My Events
     'myEvents.title': 'My Events',
@@ -541,6 +544,9 @@ export const translations = {
     'editProfile.location': 'الموقع',
     'editProfile.bio': 'السيرة الذاتية',
     'editProfile.bioPlaceholder': 'أخبرنا عن نفسك...',
+    'editProfile.phonePlaceholder': '5XXXXXXXX',
+    'editProfile.completeProfileMessage': 'يرجى إكمال ملفك الشخصي',
+    'editProfile.phoneKSAPrefix': '+966',
     
     // My Events
     'myEvents.title': 'فعالياتي',

@@ -1,44 +1,159 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useRouter } from 'expo-router';
-import { mockUser } from '../data/mockData';
-import { ImageWithFallback } from '../components/ImageWithFallback';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
 
 export default function EditProfileScreen() {
   const { t, isRTL } = useLanguage();
   const router = useRouter();
-  const [fullName, setFullName] = useState(mockUser.name);
-  const [email, setEmail] = useState(mockUser.email);
-  const [phoneNumber, setPhoneNumber] = useState(mockUser.phone);
-  const [location, setLocation] = useState(mockUser.location || '');
-  const [bio, setBio] = useState(mockUser.bio || '');
+  const params = useLocalSearchParams();
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [bio, setBio] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const handleSave = () => {
+  // Fetch user profile to auto-populate fields (especially email)
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const token = await storageService.getToken();
+        if (!token) {
+          console.warn('No token found, user may need to login');
+          setLoadingProfile(false);
+          return;
+        }
+
+        const response = await apiService.get<{
+          success?: boolean;
+          data?: {
+            email?: string;
+            name?: string;
+            phone?: string;
+            bio?: string;
+          };
+          email?: string;
+          name?: string;
+          phone?: string;
+          bio?: string;
+        }>('/users/profile');
+
+        // Handle different response formats
+        const profileData = response.data || response;
+        
+        if (profileData.email) {
+          setEmail(profileData.email);
+        }
+        if (profileData.name) {
+          setFullName(profileData.name);
+        }
+        if (profileData.phone) {
+          // Remove +966 prefix if present for display (we'll add it back on save)
+          const phoneWithoutPrefix = profileData.phone.replace(/^\+966/, '').replace(/^966/, '');
+          setPhoneNumber(phoneWithoutPrefix);
+        }
+        if (profileData.bio) {
+          setBio(profileData.bio);
+        }
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+        // If profile doesn't exist yet, that's okay - user will fill it in
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    loadUserProfile();
+  }, []);
+
+  // Format phone number for KSA (Saudi Arabia) - +966 prefix
+  const formatKSAPhone = (phone: string) => {
+    // Remove any non-digit characters
+    const digits = phone.replace(/\D/g, '');
+    // If starts with 966, keep it; otherwise add +966 prefix
+    if (digits.startsWith('966')) {
+      return `+${digits}`;
+    } else if (digits.startsWith('0')) {
+      // Remove leading 0 and add +966
+      return `+966${digits.substring(1)}`;
+    } else if (digits.length > 0) {
+      return `+966${digits}`;
+    }
+    return '';
+  };
+
+  const handlePhoneChange = (text: string) => {
+    // Allow only digits
+    const digits = text.replace(/\D/g, '');
+    // Limit to 9 digits (KSA phone numbers are typically 9 digits after country code)
+    if (digits.length <= 9) {
+      setPhoneNumber(digits);
+    }
+  };
+
+  const handleSave = async () => {
+    // Validate all fields are mandatory
     if (!fullName.trim()) {
-      Alert.alert('Error', 'Please enter your full name');
+      Alert.alert(t('common.error'), t('editProfile.fullName') + ' is required');
       return;
     }
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email');
+      Alert.alert(t('common.error'), t('editProfile.email') + ' is required');
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('common.error'), 'Please enter a valid email address');
       return;
     }
-    // TODO: Implement actual save logic
-    Alert.alert('Success', 'Profile updated successfully', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
-  };
+    if (!phoneNumber.trim()) {
+      Alert.alert(t('common.error'), t('editProfile.phoneNumber') + ' is required');
+      return;
+    }
+    if (phoneNumber.length < 9) {
+      Alert.alert(t('common.error'), 'Phone number must be at least 9 digits');
+      return;
+    }
+    if (!bio.trim()) {
+      Alert.alert(t('common.error'), t('editProfile.bio') + ' is required');
+      return;
+    }
 
-  const handleChangePhoto = () => {
-    // TODO: Implement image picker
-    Alert.alert('Info', 'Image picker functionality will be implemented');
+    setLoading(true);
+    try {
+      const formattedPhone = formatKSAPhone(phoneNumber);
+      const response = await apiService.put('/users/profile', {
+        name: fullName.trim(),
+        phone: formattedPhone,
+        bio: bio.trim(),
+      });
+      
+      console.log('Profile updated successfully:', response);
+      
+      Alert.alert(
+        t('common.success'),
+        'Profile updated successfully',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              router.back();
+            }
+          }
+        ]
+      );
+    } catch (err: any) {
+      console.error('Failed to update profile:', err);
+      const errorMessage = err?.message || 'Failed to save profile. Please try again.';
+      Alert.alert(t('common.error'), errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -48,8 +163,12 @@ export default function EditProfileScreen() {
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('editProfile.title')}</Text>
-        <TouchableOpacity onPress={handleSave}>
-          <Text style={styles.saveButton}>{t('editProfile.save')}</Text>
+        <TouchableOpacity onPress={handleSave} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#D4A444" />
+          ) : (
+            <Text style={styles.saveButton}>{t('editProfile.save')}</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -58,34 +177,12 @@ export default function EditProfileScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Photo */}
-        <View style={styles.photoSection}>
-          <View style={styles.photoContainer}>
-            <ImageWithFallback
-              source={{ uri: mockUser.avatar }}
-              style={styles.profilePhoto}
-              fallbackComponent={
-                <View style={styles.profilePhotoPlaceholder}>
-                  <Ionicons name="person" size={40} color="#9ca3af" />
-                </View>
-              }
-            />
-            <TouchableOpacity 
-              style={styles.changePhotoButton}
-              onPress={handleChangePhoto}
-            >
-              <Ionicons name="camera" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={handleChangePhoto}>
-            <Text style={styles.changePhotoText}>{t('editProfile.changeProfilePhoto')}</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Form Fields */}
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('editProfile.fullName')}</Text>
+            <Text style={styles.label}>
+              {t('editProfile.fullName')} <Text style={styles.required}>*</Text>
+            </Text>
             <View style={styles.inputWrapper}>
               <Ionicons 
                 name="person-outline" 
@@ -104,7 +201,9 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('editProfile.email')}</Text>
+            <Text style={styles.label}>
+              {t('editProfile.email')} <Text style={styles.required}>*</Text>
+            </Text>
             <View style={styles.inputWrapper}>
               <Ionicons 
                 name="mail-outline" 
@@ -113,58 +212,40 @@ export default function EditProfileScreen() {
                 style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
               />
               <TextInput
-                style={[styles.input, isRTL && styles.inputRTL]}
+                style={[styles.input, isRTL && styles.inputRTL, styles.inputDisabled]}
                 placeholder={t('editProfile.email')}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 placeholderTextColor="#9ca3af"
+                editable={false}
               />
             </View>
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('editProfile.phoneNumber')}</Text>
+            <Text style={styles.label}>
+              {t('editProfile.phoneNumber')} <Text style={styles.required}>*</Text>
+            </Text>
             <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="call-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
-              />
+              <Text style={styles.phonePrefix}>{t('editProfile.phoneKSAPrefix')}</Text>
               <TextInput
-                style={[styles.input, isRTL && styles.inputRTL]}
-                placeholder={t('editProfile.phoneNumber')}
+                style={[styles.input, styles.phoneInput, isRTL && styles.inputRTL]}
+                placeholder={t('editProfile.phonePlaceholder')}
                 value={phoneNumber}
-                onChangeText={setPhoneNumber}
+                onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
                 placeholderTextColor="#9ca3af"
               />
             </View>
+            <Text style={styles.hint}>Saudi Arabia phone number (9 digits)</Text>
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('editProfile.location')}</Text>
-            <View style={styles.inputWrapper}>
-              <Ionicons 
-                name="location-outline" 
-                size={20} 
-                color="#9ca3af" 
-                style={[styles.inputIcon, isRTL && styles.inputIconRTL]} 
-              />
-              <TextInput
-                style={[styles.input, isRTL && styles.inputRTL]}
-                placeholder={t('editProfile.location')}
-                value={location}
-                onChangeText={setLocation}
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>{t('editProfile.bio')}</Text>
+            <Text style={styles.label}>
+              {t('editProfile.bio')} <Text style={styles.required}>*</Text>
+            </Text>
             <View style={styles.bioWrapper}>
               <TextInput
                 style={[styles.bioInput, isRTL && styles.bioInputRTL]}
@@ -213,46 +294,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
   },
-  photoSection: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  photoContainer: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  profilePhoto: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#f3f4f6',
-  },
-  profilePhotoPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#f3f4f6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  changePhotoButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#D4A444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  changePhotoText: {
-    fontSize: 14,
-    color: '#D4A444',
-    fontWeight: '500',
-  },
   form: {
     gap: 20,
   },
@@ -264,6 +305,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#374151',
     fontWeight: '500',
+  },
+  required: {
+    color: '#ef4444',
   },
   inputWrapper: {
     position: 'relative',
@@ -278,6 +322,18 @@ const styles = StyleSheet.create({
   inputIconRTL: {
     left: 'auto',
     right: 12,
+  },
+  phonePrefix: {
+    position: 'absolute',
+    left: 44,
+    zIndex: 1,
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  phonePrefixRTL: {
+    left: 'auto',
+    right: 44,
   },
   input: {
     flex: 1,
@@ -294,6 +350,22 @@ const styles = StyleSheet.create({
   inputRTL: {
     paddingLeft: 16,
     paddingRight: 44,
+  },
+  inputDisabled: {
+    backgroundColor: '#f3f4f6',
+    color: '#6b7280',
+  },
+  phoneInput: {
+    paddingLeft: 80,
+  },
+  phoneInputRTL: {
+    paddingLeft: 16,
+    paddingRight: 80,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 4,
   },
   bioWrapper: {
     backgroundColor: '#f9fafb',

@@ -43,6 +43,9 @@ export default function LoginScreen() {
           _id: string;
           name: string;
           email: string;
+          phone?: string;
+          bio?: string;
+          iban?: string;
           role: string;
           token: string;
         };
@@ -52,12 +55,15 @@ export default function LoginScreen() {
       });
 
       if (response.success && response.data?.token) {
-        // Store token and user data
+        // Store token and user data (including IBAN if present)
         await storageService.setToken(response.data.token);
         await storageService.setUser({
           _id: response.data._id,
           name: response.data.name,
           email: response.data.email,
+          phone: response.data.phone,
+          bio: response.data.bio,
+          iban: response.data.iban, // Save IBAN from login response
           role: response.data.role,
         });
 
@@ -68,25 +74,30 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       console.error('Login failed', err);
+      console.log('Error details:', {
+        status: err.status,
+        message: err.message,
+        data: err.data
+      });
       
-      // Extract user-friendly error message
-      let errorMessage = 'Failed to login. Please check your credentials and try again.';
+      // Extract error message from backend response
+      let errorMessage = 'Invalid email or password. Please check your credentials and try again.';
       
-      if (err.message) {
-        // If it's a 401, provide a more specific message
-        if (err.status === 401) {
-          errorMessage = err.message.includes('401') 
-            ? 'Invalid email or password. Please check your credentials and try again.'
-            : err.message;
-        } else if (err.message.includes('Network') || err.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        } else if (!err.message.includes('HTTP error')) {
-          // Use the error message if it's not a generic HTTP error
-          errorMessage = err.message;
-        }
+      // Check error data first (contains the backend response)
+      if (err.data && err.data.message) {
+        errorMessage = err.data.message;
+      }
+      // Check error message (API service extracts message from response)
+      else if (err.message && !err.message.includes('HTTP error')) {
+        errorMessage = err.message;
       }
       
-      Alert.alert('Login Failed', errorMessage);
+      // Always show alert popup
+      Alert.alert(
+        'Authentication Failed',
+        errorMessage,
+        [{ text: 'OK', style: 'default' }]
+      );
     } finally {
       setLoading(false);
     }
