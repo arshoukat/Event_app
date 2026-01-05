@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { ImageWithFallback } from '../components/ImageWithFallback';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
-import { encode } from 'base-64';
+import { encode, decode } from 'base-64';
 import Toast from 'react-native-toast-message';
 import { LanguageToggle } from '../components/LanguageToggle';
 
@@ -120,8 +120,26 @@ export default function CreateEventScreen() {
   // Function to fetch user profile and extract IBAN
   const fetchUserIBAN = async (): Promise<string | null> => {
     try {
-      // Try to get user profile from API
-      const response = await apiService.get<{ success: boolean; data: { iban?: string } } | { data: { iban?: string } } | { iban?: string }>('/auth/me');
+      // Get user profile from API (using the same endpoint as profile screen)
+      const response = await apiService.get<{
+        success?: boolean;
+        data?: { 
+          iban?: string;
+          _id?: string;
+          name?: string;
+          email?: string;
+          phone?: string;
+          bio?: string;
+        };
+        iban?: string;
+        _id?: string;
+        name?: string;
+        email?: string;
+        phone?: string;
+        bio?: string;
+      }>('/users/profile');
+      
+      console.log('[CreateEvent] Profile response:', JSON.stringify(response, null, 2));
       
       // Handle different response formats
       let userData: any = null;
@@ -135,17 +153,108 @@ export default function CreateEventScreen() {
         }
       }
       
+      console.log('[CreateEvent] Extracted userData:', JSON.stringify(userData, null, 2));
+      
       if (userData && userData.iban) {
-        // If IBAN is stored, return it (backend should return it in readable format, not encoded)
-        return userData.iban;
+        let ibanValue = userData.iban.trim();
+        const originalIBAN = ibanValue;
+        
+        // IBAN format: 2 letters + 2 digits + alphanumeric (typically 15-34 chars total)
+        const ibanRegex = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/;
+        const cleanedIBAN = ibanValue.replace(/\s/g, '').toUpperCase();
+        
+        // Check if it already matches IBAN format (already decoded)
+        if (ibanRegex.test(cleanedIBAN)) {
+          console.log('[CreateEvent] IBAN is already in correct format:', ibanValue);
+          return ibanValue;
+        }
+        
+        // If it doesn't match IBAN format, it's likely base64 encoded - try to decode it
+        try {
+          // Remove any whitespace before decoding
+          const ibanToDecode = ibanValue.replace(/\s/g, '');
+          const decoded = decode(ibanToDecode);
+          console.log('[CreateEvent] Attempted to decode IBAN. Original:', originalIBAN, 'Decoded:', decoded);
+          
+          if (decoded && decoded.trim().length > 0) {
+            // Clean and check decoded value
+            const decodedCleaned = decoded.trim().replace(/\s/g, '').toUpperCase();
+            
+            // Check if decoded value looks like an IBAN
+            if (ibanRegex.test(decodedCleaned)) {
+              // Use decoded value if it matches IBAN format
+              ibanValue = decodedCleaned;
+              console.log('[CreateEvent] Successfully decoded IBAN from base64:', ibanValue);
+            } else {
+              // Even if it doesn't match format perfectly, use decoded if it has reasonable length
+              // (some IBANs might have slightly different formats)
+              if (decodedCleaned.length >= 10 && decodedCleaned.length <= 34 && /^[A-Z0-9]+$/.test(decodedCleaned)) {
+                ibanValue = decodedCleaned;
+                console.log('[CreateEvent] Using decoded value (alphanumeric check passed):', ibanValue);
+              } else {
+                console.log('[CreateEvent] Decoded value seems invalid, using original');
+              }
+            }
+          }
+        } catch (decodeError) {
+          console.error('[CreateEvent] Failed to decode IBAN, might not be base64:', decodeError);
+          console.log('[CreateEvent] Using original IBAN value:', originalIBAN);
+          // If decode fails, return original value
+        }
+        
+        console.log('[CreateEvent] Final IBAN value:', ibanValue);
+        return ibanValue;
       }
       
+      // Fallback: Check if IBAN is stored in AsyncStorage from login
+      try {
+        const storedUser = await storageService.getUser();
+        if (storedUser && storedUser.iban) {
+          let storedIBAN = storedUser.iban;
+          
+          // Try to decode if it looks encoded
+          const ibanRegex = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/;
+          const cleanedStored = storedIBAN.replace(/\s/g, '').toUpperCase();
+          
+          if (!ibanRegex.test(cleanedStored)) {
+            try {
+              const decoded = decode(storedIBAN);
+              console.log('[CreateEvent] Decoded IBAN from stored user data');
+              storedIBAN = decoded;
+            } catch (decodeError) {
+              console.log('[CreateEvent] Stored IBAN is not base64 encoded');
+            }
+          }
+          
+          console.log('[CreateEvent] Found IBAN in stored user data:', storedIBAN);
+          return storedIBAN;
+        }
+      } catch (storageError) {
+        console.log('[CreateEvent] Could not check stored user data:', storageError);
+      }
+      
+      console.log('[CreateEvent] No IBAN found in profile or storage');
       return null;
     } catch (error) {
       console.error('[CreateEvent] Failed to fetch user IBAN:', error);
       return null;
     }
   };
+
+  // Auto-populate IBAN when screen loads (if user has saved IBAN from previous event)
+  useEffect(() => {
+    const loadUserIBAN = async () => {
+      const savedIBAN = await fetchUserIBAN();
+      if (savedIBAN) {
+        setFormData(prev => ({
+          ...prev,
+          iban: savedIBAN
+        }));
+      }
+    };
+    
+    loadUserIBAN();
+  }, []);
 
   const handleInputChange = (field: string, value: string | boolean | Date | null) => {
     setFormData(prev => {
@@ -733,6 +842,19 @@ export default function CreateEventScreen() {
         const result = await response.json();
         console.log('Event created successfully:', result);
         
+        // Save IBAN to user profile if this is a paid event (for future use)
+        if (formData.isPaid && formData.iban) {
+          try {
+            await apiService.put('/users/profile', {
+              iban: formData.iban.trim()
+            });
+            console.log('[CreateEvent] IBAN saved to user profile');
+          } catch (ibanError) {
+            console.error('[CreateEvent] Failed to save IBAN to profile:', ibanError);
+            // Don't fail the event creation if IBAN save fails
+          }
+        }
+        
         // Show success toast
         Toast.show({
           type: 'success',
@@ -752,6 +874,19 @@ export default function CreateEventScreen() {
         
         const result = await apiService.post('/events', eventData);
         console.log('Event created successfully:', result);
+        
+        // Save IBAN to user profile if this is a paid event (for future use)
+        if (formData.isPaid && formData.iban) {
+          try {
+            await apiService.put('/users/profile', {
+              iban: formData.iban.trim()
+            });
+            console.log('[CreateEvent] IBAN saved to user profile');
+          } catch (ibanError) {
+            console.error('[CreateEvent] Failed to save IBAN to profile:', ibanError);
+            // Don't fail the event creation if IBAN save fails
+          }
+        }
         
         // Show success toast
         Toast.show({

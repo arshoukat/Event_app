@@ -43,6 +43,9 @@ export default function LoginScreen() {
           _id: string;
           name: string;
           email: string;
+          phone?: string;
+          bio?: string;
+          iban?: string;
           role: string;
           token: string;
         };
@@ -52,12 +55,15 @@ export default function LoginScreen() {
       });
 
       if (response.success && response.data?.token) {
-        // Store token and user data
+        // Store token and user data (including IBAN if present)
         await storageService.setToken(response.data.token);
         await storageService.setUser({
           _id: response.data._id,
           name: response.data.name,
           email: response.data.email,
+          phone: response.data.phone,
+          bio: response.data.bio,
+          iban: response.data.iban, // Save IBAN from login response
           role: response.data.role,
         });
 

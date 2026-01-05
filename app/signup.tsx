@@ -99,27 +99,9 @@ export default function SignupScreen() {
       // Reset loading state
       setLoadingSignup(false);
       
-      // Show success alert
-      Alert.alert(
-        'Success', 
-        'Your account is created successfully, please login',
-        [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              console.log('Alert OK pressed');
-            }
-          }
-        ],
-        { cancelable: false }
-      );
-      
-      // Redirect immediately after showing alert
-      // Using setTimeout to ensure Alert is displayed first
-      setTimeout(() => {
-        console.log('Redirecting to login page...');
-        router.replace('/login');
-      }, 500);
+      // Redirect to profile page to complete profile
+      console.log('Redirecting to profile page...');
+      router.replace('/profile?completeProfile=true');
     } catch (err: any) {
       console.error('Signup failed', err);
       setLoadingSignup(false);

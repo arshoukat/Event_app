@@ -1,20 +1,105 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BottomNav } from '../components/BottomNav';
 import { ImageWithFallback } from '../components/ImageWithFallback';
-import { mockUser } from '../data/mockData';
+import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
+
+interface UserProfile {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  bio?: string;
+  avatar?: string;
+  imageUrl?: string;
+  iban?: string;
+  stats?: {
+    eventsAttended?: number;
+    following?: number;
+    followers?: number;
+  };
+}
 
 export default function ProfileScreen() {
   const { t } = useLanguage();
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const hasShownAlert = useRef(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const user = mockUser;
+  // Fetch user profile data
+  const fetchUserProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = await storageService.getToken();
+      if (!token) {
+        setError('Please login to view profile');
+        setLoading(false);
+        return;
+      }
 
-  const menuSections = [
+      const response = await apiService.get<{
+        success?: boolean;
+        data?: UserProfile;
+        _id?: string;
+        id?: string;
+        name?: string;
+        email?: string;
+        phone?: string;
+        bio?: string;
+        avatar?: string;
+        imageUrl?: string;
+        iban?: string;
+      }>('/users/profile');
+
+      // Handle different response formats
+      const userData = response.data || response;
+      setUser(userData as UserProfile);
+    } catch (err: any) {
+      console.error('Failed to fetch user profile:', err);
+      setError('Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch profile on mount
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  // Show alert and navigate to edit profile when redirected from signup
+  useEffect(() => {
+    if (params.completeProfile === 'true' && !hasShownAlert.current) {
+      hasShownAlert.current = true;
+      Alert.alert(
+        t('common.success'),
+        t('editProfile.completeProfileMessage'),
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              router.push('/edit-profile');
+            }
+          }
+        ]
+      );
+      // Clear the query parameter
+      router.setParams({ completeProfile: undefined });
+    }
+  }, [params.completeProfile, t, router]);
+
+  const menuSections = user ? [
     {
       title: t('profile.account'),
       items: [
@@ -32,7 +117,7 @@ export default function ProfileScreen() {
         { icon: 'help-circle-outline', label: t('profile.helpSupport'), action: () => router.push('/help-support') }
       ]
     }
-  ];
+  ] : [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -41,39 +126,59 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* User Info */}
-        <View style={styles.userSection}>
-          <View style={styles.userInfo}>
-            <ImageWithFallback
-              src={user.avatar}
-              style={styles.avatar}
-            />
-            <View style={styles.userDetails}>
-              <Text style={styles.userName}>{user.name}</Text>
-              <Text style={styles.userEmail}>{user.email}</Text>
-            </View>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#D4A444" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
           </View>
-
-          {/* Stats */}
-          <View style={styles.statsContainer}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{user.stats.eventsAttended}</Text>
-              <Text style={styles.statLabel}>{t('profile.events')}</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{user.stats.following}</Text>
-              <Text style={styles.statLabel}>{t('profile.following')}</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{user.stats.followers}</Text>
-              <Text style={styles.statLabel}>{t('profile.followers')}</Text>
-            </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={fetchUserProfile}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        ) : user ? (
+          <>
+            {/* User Info */}
+            <View style={styles.userSection}>
+              <View style={styles.userInfo}>
+                <ImageWithFallback
+                  src={user.avatar || user.imageUrl || 'https://via.placeholder.com/80?text=User'}
+                  style={styles.avatar}
+                />
+                <View style={styles.userDetails}>
+                  <Text style={styles.userName}>{user.name || 'User'}</Text>
+                  <Text style={styles.userEmail}>{user.email || ''}</Text>
+                </View>
+              </View>
 
-        {/* Menu Sections */}
-        <View style={styles.menuContainer}>
-          {menuSections.map((section, sectionIndex) => (
+              {/* Stats */}
+              <View style={styles.statsContainer}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{user.stats?.eventsAttended || 0}</Text>
+                  <Text style={styles.statLabel}>{t('profile.events')}</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{user.stats?.following || 0}</Text>
+                  <Text style={styles.statLabel}>{t('profile.following')}</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{user.stats?.followers || 0}</Text>
+                  <Text style={styles.statLabel}>{t('profile.followers')}</Text>
+                </View>
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {user && (
+          <View style={styles.menuContainer}>
+            {menuSections.map((section, sectionIndex) => (
             <View key={sectionIndex} style={styles.menuSection}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
               {section.items.map((item, itemIndex) => (
@@ -95,18 +200,24 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          ))}
+            ))}
 
-          {/* Logout */}
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={() => router.replace('/login')}
-          >
-            <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-            <Text style={styles.logoutText}>{t('profile.logout')}</Text>
-          </TouchableOpacity>
-        </View>
+            {/* Logout */}
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={() => router.replace('/login')}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+              <Text style={styles.logoutText}>{t('profile.logout')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
+
+      <BottomNav activeView="profile" onNavigate={(screen) => {
+        if (screen === 'profile') return;
+        router.push(`/${screen}`);
+      }} />
 
       <BottomNav activeView="profile" onNavigate={(screen) => {
         if (screen === 'profile') return;
@@ -239,6 +350,38 @@ const styles = StyleSheet.create({
   logoutText: {
     fontSize: 16,
     color: '#ef4444',
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    padding: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  errorContainer: {
+    padding: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ef4444',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: '#D4A444',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

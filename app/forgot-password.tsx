@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRouter } from 'expo-router';
 import { Logo } from '../components/Logo';
 import { GradientText } from '../components/GradientText';
+import { apiService } from '../services/api';
+import { LanguageToggle } from '../components/LanguageToggle';
 
 type ForgotPasswordStep = 'email' | 'otp' | 'changePassword';
 
@@ -18,9 +20,12 @@ export default function ForgotPasswordScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [loadingSend, setLoadingSend] = useState(false);
+  const [loadingVerify, setLoadingVerify] = useState(false);
+  const [loadingUpdate, setLoadingUpdate] = useState(false);
   const otpRefs = useRef<(TextInput | null)[]>([]);
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address');
       return;
@@ -30,21 +35,41 @@ export default function ForgotPasswordScreen() {
       Alert.alert('Error', 'Please enter a valid email address');
       return;
     }
-    console.log('Sending OTP to:', email);
-    setStep('otp');
-  };
-
-  const handleVerifyOTP = () => {
-    const otpCode = otp.join('');
-    if (otpCode.length === 6) {
-      console.log('Verifying OTP:', otpCode);
-      setStep('changePassword');
-    } else {
-      Alert.alert('Error', 'Please enter the complete 6-digit code');
+    setLoadingSend(true);
+    try {
+      const response = await apiService.post<{ success: boolean; message: string }>('/auth/forgot-password', { email });
+      Alert.alert('Success', response.message || 'If the email exists in our system, an OTP has been sent to your email address');
+      setStep('otp');
+    } catch (err: any) {
+      console.error('Send OTP failed', err);
+      const errorMessage = err?.message || 'Failed to send OTP. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoadingSend(false);
     }
   };
 
-  const handleChangePassword = () => {
+  const handleVerifyOTP = async () => {
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) {
+      Alert.alert('Error', 'Please enter the complete 6-digit code');
+      return;
+    }
+    setLoadingVerify(true);
+    try {
+      await apiService.post('/auth/signup/verify', { email, otp: otpCode });
+      Alert.alert('Success', 'OTP verified');
+      setStep('changePassword');
+    } catch (err: any) {
+      console.error('Verify OTP failed', err);
+      const errorMessage = err?.message || 'Invalid or expired OTP. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoadingVerify(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
     if (!newPassword || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -57,10 +82,23 @@ export default function ForgotPasswordScreen() {
       Alert.alert('Error', t('auth.passwordsDoNotMatch'));
       return;
     }
-    // TODO: Implement actual password reset logic
-    Alert.alert('Success', t('auth.passwordResetSuccess'), [
-      { text: 'OK', onPress: () => router.replace('/login') }
-    ]);
+    setLoadingUpdate(true);
+    try {
+      await apiService.put('/auth/update-password', {
+        email,
+        newPassword,
+        confirmPassword,
+      });
+      Alert.alert('Success', t('auth.passwordResetSuccess'), [
+        { text: 'OK', onPress: () => router.replace('/login') }
+      ]);
+    } catch (err: any) {
+      console.error('Update password failed', err);
+      const errorMessage = err?.message || 'Failed to update password. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoadingUpdate(false);
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -82,12 +120,18 @@ export default function ForgotPasswordScreen() {
     }
   };
 
-  const handleResendOTP = () => {
+  const handleResendOTP = async () => {
     setIsResending(true);
-    setTimeout(() => {
+    try {
+      const response = await apiService.post<{ success: boolean; message: string }>('/auth/forgot-password', { email });
+      Alert.alert('Success', response.message || 'If the email exists in our system, an OTP has been sent to your email address');
+    } catch (err: any) {
+      console.error('Resend OTP failed', err);
+      const errorMessage = err?.message || 'Failed to resend OTP. Please try again.';
+      Alert.alert('Error', errorMessage);
+    } finally {
       setIsResending(false);
-      console.log('OTP resent to:', email);
-    }, 2000);
+    }
   };
 
   return (
@@ -95,6 +139,9 @@ export default function ForgotPasswordScreen() {
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
     >
+      <View style={styles.languageToggleContainer}>
+        <LanguageToggle />
+      </View>
       <View style={styles.header}>
         <Logo size={120} />
         {Platform.OS === 'web' ? (
@@ -135,8 +182,16 @@ export default function ForgotPasswordScreen() {
             <Text style={styles.hint}>{t('auth.verificationCodeWillBeSent')}</Text>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleSendOTP}>
-            <Text style={styles.buttonText}>{t('auth.sendOTP')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingSend && styles.buttonDisabled]} 
+            onPress={handleSendOTP}
+            disabled={loadingSend}
+          >
+            {loadingSend ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.sendOTP')}</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -185,8 +240,16 @@ export default function ForgotPasswordScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleVerifyOTP}>
-            <Text style={styles.buttonText}>{t('auth.verifyAndContinue')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingVerify && styles.buttonDisabled]} 
+            onPress={handleVerifyOTP}
+            disabled={loadingVerify}
+          >
+            {loadingVerify ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.verifyAndContinue')}</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -253,8 +316,16 @@ export default function ForgotPasswordScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.button} onPress={handleChangePassword}>
-            <Text style={styles.buttonText}>{t('auth.resetPasswordButton')}</Text>
+          <TouchableOpacity 
+            style={[styles.button, loadingUpdate && styles.buttonDisabled]} 
+            onPress={handleChangePassword}
+            disabled={loadingUpdate}
+          >
+            {loadingUpdate ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.resetPasswordButton')}</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -278,6 +349,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageToggleContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 24,
+    zIndex: 10,
   },
   header: {
     alignItems: 'center',
@@ -363,6 +440,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',
