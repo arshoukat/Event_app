@@ -157,11 +157,31 @@ export default function TicketBookingScreen() {
     return subtotal + processingFee + tax;
   };
 
-  const handleProceedToPayment = () => {
+  const handleProceedToPayment = async () => {
     const totalQty = getTotalQuantity();
     if (totalQty === 0) {
       Alert.alert('Error', 'Please select at least one ticket');
       return;
+    }
+
+    // Check capacity before proceeding
+    const eventId = Array.isArray(id) ? String(id[0]) : String(id);
+    try {
+      const response = await apiService.post<{ available: boolean; currentCount: number; maxAttendees: number | null }>(`/events/${eventId}/check-capacity`);
+      
+      if (response && typeof response === 'object' && 'available' in response) {
+        if (!response.available && response.maxAttendees) {
+          Alert.alert(
+            'Event Full',
+            'This event is full. No more seats available.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.error('Capacity check failed:', err);
+      // If capacity check fails, proceed anyway (backend will handle)
     }
 
     // Calculate values for payment
@@ -169,7 +189,6 @@ export default function TicketBookingScreen() {
     const currentTotal = currentSubtotal + processingFee + tax;
 
     // Prepare payment data
-    const eventId = Array.isArray(id) ? String(id[0]) : String(id);
     const paymentData = {
       eventId: encodeURIComponent(eventId),
       tickets: encodeURIComponent(JSON.stringify(selectedTickets.filter(t => t.quantity > 0))),

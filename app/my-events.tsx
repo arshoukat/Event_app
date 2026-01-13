@@ -25,6 +25,7 @@ interface ApiEvent {
   tags?: string[];
   attendees?: number | string[];
   capacity?: number;
+  visibility?: 'public' | 'private';
   createdBy?: {
     _id: string;
     name: string;
@@ -42,6 +43,7 @@ interface DisplayEvent {
   image: string;
   attendees: number;
   price: string;
+  visibility?: 'public' | 'private';
 }
 
 export default function MyEventsScreen() {
@@ -152,7 +154,8 @@ export default function MyEventsScreen() {
           category: event.category,
           image: imageUrl || 'https://via.placeholder.com/400x300?text=No+Image',
           attendees: attendeesCount,
-          price: priceString
+          price: priceString,
+          visibility: event.visibility
         };
       }).filter((event) => event.id !== ''); // Filter out events without IDs
 
@@ -228,7 +231,26 @@ export default function MyEventsScreen() {
             <EventCard
               key={event.id}
               event={event}
-              onViewDetails={(id) => router.push(`/event-detail?id=${id}`)}
+              onViewDetails={(id, visibility) => {
+                // Check if event is private
+                if (visibility === 'private') {
+                  Alert.alert(
+                    'Private Event',
+                    'This is a private event',
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => {
+                          // Return to home screen (stay on current screen)
+                        }
+                      }
+                    ]
+                  );
+                  return; // Prevent navigation
+                }
+                // Navigate to event detail for public events
+                router.push(`/event-detail?id=${id}`);
+              }}
             />
           ))
         ) : (

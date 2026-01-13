@@ -99,9 +99,19 @@ export default function SignupScreen() {
       // Reset loading state
       setLoadingSignup(false);
       
-      // Redirect to profile page to complete profile
-      console.log('Redirecting to profile page...');
-      router.replace('/profile?completeProfile=true');
+      // Show success message and redirect to login page
+      Alert.alert(
+        'Success',
+        'Account created successfully! Please login to continue.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.replace('/login');
+            }
+          }
+        ]
+      );
     } catch (err: any) {
       console.error('Signup failed', err);
       setLoadingSignup(false);

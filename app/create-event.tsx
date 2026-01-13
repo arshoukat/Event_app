@@ -69,6 +69,7 @@ export default function CreateEventScreen() {
     venue: '',
     eventType: 'in-person' as 'in-person' | 'online',
     capacity: '',
+    maxAttendees: '',
     price: '',
     category: '',
     visibility: 'public' as 'public' | 'private',
@@ -412,6 +413,14 @@ export default function CreateEventScreen() {
       }
     }
 
+    // Max Attendees validation (if provided, only for private events)
+    if (formData.visibility === 'private' && formData.maxAttendees.trim()) {
+      const maxAttendeesNum = parseInt(formData.maxAttendees);
+      if (isNaN(maxAttendeesNum) || maxAttendeesNum <= 0) {
+        newErrors.maxAttendees = 'Max attendees must be a positive number';
+      }
+    }
+
     // Paid event validations
     if (formData.isPaid) {
       // IBAN validation
@@ -518,6 +527,18 @@ export default function CreateEventScreen() {
           }
         } else {
           delete newErrors.capacity;
+        }
+        break;
+      case 'maxAttendees':
+        if (formData.visibility === 'private' && formData.maxAttendees.trim()) {
+          const maxAttendeesNum = parseInt(formData.maxAttendees);
+          if (isNaN(maxAttendeesNum) || maxAttendeesNum <= 0) {
+            newErrors.maxAttendees = 'Max attendees must be a positive number';
+          } else {
+            delete newErrors.maxAttendees;
+          }
+        } else {
+          delete newErrors.maxAttendees;
         }
         break;
       case 'seatTypes':
@@ -770,6 +791,7 @@ export default function CreateEventScreen() {
         category: formData.category,
         price: price, // Now an array of seat types with prices
         capacity: formData.capacity ? parseInt(formData.capacity) : undefined,
+        maxAttendees: formData.visibility === 'private' && formData.maxAttendees.trim() ? parseInt(formData.maxAttendees) : undefined,
         status: 'published', // You can change this to 'draft' if needed
         tags: formData.tags, // Tags array
         visibility: formData.visibility, // Privacy/visibility field
@@ -1178,7 +1200,7 @@ export default function CreateEventScreen() {
             <DateTimePicker
               value={formData.startDate}
               mode="date"
-              display="default"
+              display="spinner"
               onChange={(event: any, selectedDate?: Date) => {
                 console.log('Android start date picker onChange:', event.type, selectedDate);
                 if (Platform.OS === 'android') {
@@ -1243,7 +1265,7 @@ export default function CreateEventScreen() {
             <DateTimePicker
               value={formData.endDate}
               mode="date"
-              display="default"
+              display="spinner"
               onChange={(event: any, selectedDate?: Date) => {
                 console.log('Android end date picker onChange:', event.type, selectedDate);
                 if (Platform.OS === 'android') {
@@ -1308,7 +1330,7 @@ export default function CreateEventScreen() {
             <DateTimePicker
               value={formData.startTime}
               mode="time"
-              display="default"
+              display="spinner"
               is24Hour={false}
               onChange={(event: any, selectedTime?: Date) => {
                 console.log('Android start time picker onChange:', event.type, selectedTime);
@@ -1800,6 +1822,25 @@ export default function CreateEventScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Max Attendees (only for private events) */}
+          {formData.visibility === 'private' && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Max Attendees (Optional)</Text>
+              <TextInput
+                style={[styles.input, (touched.maxAttendees && errors.maxAttendees) ? styles.inputError : undefined]}
+                value={formData.maxAttendees}
+                onChangeText={(value) => handleInputChange('maxAttendees', value)}
+                onBlur={() => handleBlur('maxAttendees')}
+                placeholder="Enter maximum number of attendees"
+                placeholderTextColor="#9ca3af"
+                keyboardType="number-pad"
+              />
+              {touched.maxAttendees && errors.maxAttendees && (
+                <Text style={styles.errorText}>{errors.maxAttendees}</Text>
+              )}
+            </View>
+          )}
 
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>{t('createEvent.requireApproval')}</Text>

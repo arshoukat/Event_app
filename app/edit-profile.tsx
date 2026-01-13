@@ -228,11 +228,13 @@ export default function EditProfileScreen() {
             <Text style={styles.label}>
               {t('editProfile.phoneNumber')} <Text style={styles.required}>*</Text>
             </Text>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.phonePrefix}>{t('editProfile.phoneKSAPrefix')}</Text>
+            <View style={styles.phoneInputWrapper}>
+              <View style={styles.phonePrefixContainer}>
+                <Text style={styles.phonePrefix}>+966</Text>
+              </View>
               <TextInput
-                style={[styles.input, styles.phoneInput, isRTL && styles.inputRTL]}
-                placeholder={t('editProfile.phonePlaceholder')}
+                style={[styles.phoneInput, isRTL && styles.phoneInputRTL]}
+                placeholder="5XXXXXXXXX"
                 value={phoneNumber}
                 onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
@@ -323,17 +325,26 @@ const styles = StyleSheet.create({
     left: 'auto',
     right: 12,
   },
+  phoneInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  phonePrefixContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f9fafb',
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+  },
   phonePrefix: {
-    position: 'absolute',
-    left: 44,
-    zIndex: 1,
     fontSize: 16,
     color: '#374151',
     fontWeight: '500',
-  },
-  phonePrefixRTL: {
-    left: 'auto',
-    right: 44,
   },
   input: {
     flex: 1,
@@ -356,11 +367,17 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   phoneInput: {
-    paddingLeft: 80,
+    flex: 1,
+    paddingLeft: 12,
+    paddingRight: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#000',
+    backgroundColor: 'transparent',
   },
   phoneInputRTL: {
     paddingLeft: 16,
-    paddingRight: 80,
+    paddingRight: 12,
   },
   hint: {
     fontSize: 12,

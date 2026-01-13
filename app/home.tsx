@@ -9,6 +9,7 @@ import { BottomNav } from '../components/BottomNav';
 import { EventCard } from '../components/EventCard';
 import { CategoryFilter } from '../components/CategoryFilter';
 import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
 import Toast from 'react-native-toast-message';
 
 interface ApiEvent {
@@ -27,6 +28,13 @@ interface ApiEvent {
   tags?: string[];
   attendees?: number | string[];
   capacity?: number;
+  visibility?: 'public' | 'private';
+  createdAt?: string;
+  createdBy?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+  };
 }
 
 interface DisplayEvent {
@@ -39,6 +47,13 @@ interface DisplayEvent {
   image: string;
   attendees: number;
   price: string;
+  visibility?: 'public' | 'private';
+  createdAt?: string; // For sorting by creation date
+  createdBy?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+  };
 }
 
 export default function HomeScreen() {
@@ -92,7 +107,12 @@ export default function HomeScreen() {
       
       console.log('[Home] Extracted events array, count:', eventsArray.length);
       
-      // Transform API events to display format
+      // Log visibility breakdown for debugging
+      const publicCount = eventsArray.filter(e => e.visibility === 'public' || !e.visibility).length;
+      const privateCount = eventsArray.filter(e => e.visibility === 'private').length;
+      console.log('[Home] Events by visibility - Public:', publicCount, 'Private:', privateCount);
+      
+      // Transform API events to display format (ALL events including private)
       const transformedEvents: DisplayEvent[] = eventsArray.map((event) => {
         // Extract ID - prefer _id (MongoDB) over id
         const eventId = event._id ? String(event._id) : (event.id ? String(event.id) : null);
@@ -167,9 +187,28 @@ export default function HomeScreen() {
           image: imageUrl || 'https://via.placeholder.com/400x300?text=No+Image',
           attendees: attendeesCount,
           price: priceString,
+          visibility: event.visibility,
+          createdAt: event.createdAt, // Store creation date for sorting
+          createdBy: event.createdBy, // Store creator info for private event access check
         };
       }).filter((event): event is DisplayEvent => event !== null); // Filter out null events
 
+      // Sort events by creation date (newest first)
+      transformedEvents.sort((a, b) => {
+        // Parse creation dates
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        
+        // If dates are equal or both missing, maintain original order (by ID as fallback)
+        if (dateA === dateB) {
+          return 0;
+        }
+        
+        // Sort descending (newest first)
+        return dateB - dateA;
+      });
+
+      console.log('[Home] Events sorted by creation date (newest first)');
       setEvents(transformedEvents);
     } catch (err: any) {
       console.error('Failed to fetch events:', err);
@@ -224,7 +263,43 @@ export default function HomeScreen() {
     return matchesCategory && matchesSearch;
   });
 
-  const handleViewEvent = (eventId: number | string) => {
+  const handleViewEvent = async (eventId: number | string, visibility?: 'public' | 'private', createdBy?: { _id?: string }) => {
+    // Check if event is private
+    if (visibility === 'private') {
+      // Check if current user is the creator
+      try {
+        const user = await storageService.getUser();
+        const isCreator = user && user._id && createdBy?._id && user._id === createdBy._id;
+        
+        if (!isCreator) {
+          // Not the creator, show alert and prevent navigation
+          Alert.alert(
+            'Private Event',
+            'This is a private event',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Return to home screen (stay on current screen)
+                }
+              }
+            ]
+          );
+          return; // Prevent navigation
+        }
+        // Creator can proceed to view their own private event
+      } catch (err) {
+        console.error('Error checking creator status:', err);
+        // If check fails, block access to be safe
+        Alert.alert(
+          'Private Event',
+          'This is a private event',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
     // Ensure eventId is valid before navigating
     if (eventId === undefined || eventId === null || eventId === 'undefined' || eventId === 'null' || eventId === '' || eventId === 'unknown') {
       console.error('Invalid event ID:', eventId);
@@ -236,6 +311,48 @@ export default function HomeScreen() {
     console.log('Navigating to event detail with ID:', idString);
     // Use encodeURIComponent to properly encode the ID in the URL
     router.push(`/event-detail?id=${encodeURIComponent(idString)}`);
+  };
+
+  // Save event handler
+  const handleSaveEvent = async (eventId: number | string) => {
+    try {
+      // Check if user is logged in
+      const token = await storageService.getToken();
+      if (!token) {
+        Alert.alert('Login Required', 'Please login to save events');
+        router.push('/login');
+        return;
+      }
+
+      const user = await storageService.getUser();
+      if (!user || !user._id) {
+        Alert.alert('Error', 'User information not found. Please login again.');
+        router.push('/login');
+        return;
+      }
+
+      if (!eventId) {
+        throw new Error('Event ID not found');
+      }
+
+      // Call save event API
+      const response = await apiService.post('/saved-events', {
+        eventId: String(eventId),
+        userId: user._id,
+      });
+
+      console.log('Event saved successfully:', response);
+
+      // Show success popup
+      Alert.alert('Success', 'This event is saved');
+    } catch (err: any) {
+      console.error('Failed to save event:', err);
+      if (err.status === 409) {
+        Alert.alert('Already Saved', 'This event is already in your saved events');
+      } else {
+        Alert.alert('Error', err?.message || 'Failed to save event. Please try again.');
+      }
+    }
   };
 
   return (
@@ -315,7 +432,8 @@ export default function HomeScreen() {
               <EventCard 
                 key={`event-${event.id}-${index}`} 
                 event={event}
-                onViewDetails={handleViewEvent}
+                onViewDetails={(id, visibility) => handleViewEvent(id, visibility, event.createdBy)}
+                onSave={handleSaveEvent}
               />
             ))
           ) : (

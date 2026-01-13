@@ -13,14 +13,16 @@ interface Event {
   image: string;
   attendees: number;
   price: string;
+  visibility?: 'public' | 'private';
 }
 
 interface EventCardProps {
   event: Event;
-  onViewDetails: (id: number | string) => void;
+  onViewDetails: (id: number | string, visibility?: 'public' | 'private') => void;
+  onSave?: (id: number | string) => void;
 }
 
-export function EventCard({ event, onViewDetails }: EventCardProps) {
+export function EventCard({ event, onViewDetails, onSave }: EventCardProps) {
   return (
     <View style={styles.container}>
       <View style={styles.imageContainer}>
@@ -28,9 +30,28 @@ export function EventCard({ event, onViewDetails }: EventCardProps) {
           src={event.image}
           style={styles.image}
         />
-        <TouchableOpacity style={styles.bookmarkButton}>
+        <TouchableOpacity 
+          style={styles.bookmarkButton}
+          onPress={() => onSave && onSave(event.id)}
+        >
           <Ionicons name="bookmark-outline" size={16} color="#000" />
         </TouchableOpacity>
+        {/* Visibility Badge */}
+        {event.visibility && (
+          <View style={[
+            styles.visibilityBadge,
+            event.visibility === 'private' && styles.visibilityBadgePrivate
+          ]}>
+            <Ionicons 
+              name={event.visibility === 'private' ? 'lock-closed' : 'globe'} 
+              size={12} 
+              color="#fff" 
+            />
+            <Text style={styles.visibilityText}>
+              {event.visibility === 'private' ? 'Private' : 'Public'}
+            </Text>
+          </View>
+        )}
         <View style={styles.priceBadge}>
           <Text style={styles.priceText}>{event.price}</Text>
         </View>
@@ -62,7 +83,7 @@ export function EventCard({ event, onViewDetails }: EventCardProps) {
         </View>
         
         <TouchableOpacity 
-          onPress={() => onViewDetails(event.id)}
+          onPress={() => onViewDetails(event.id, event.visibility)}
           style={styles.button}
         >
           <Text style={styles.buttonText}>View Details</Text>
@@ -109,6 +130,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  visibilityBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  visibilityBadgePrivate: {
+    backgroundColor: '#6366f1',
+  },
+  visibilityText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+    textTransform: 'capitalize',
   },
   priceBadge: {
     position: 'absolute',
